@@ -47,14 +47,7 @@ export function ShipmentsTab() {
 
     const dayIndex = WEEKDAYS.indexOf(filter);
     if (dayIndex !== -1) {
-      const currentDay = today.getDay();
-      const daysToAdd = dayIndex - (currentDay === 0 ? 6 : currentDay - 1);
-      const selectedDate = new Date(today);
-      selectedDate.setDate(selectedDate.getDate() + daysToAdd);
-
-      const nextDay = new Date(selectedDate);
-      nextDay.setDate(nextDay.getDate() + 1);
-      return { start: selectedDate, end: nextDay };
+      return { weekday: dayIndex };
     }
 
     const weekIndex = WEEK_NUMBERS.indexOf(filter);
@@ -83,6 +76,15 @@ export function ShipmentsTab() {
 
     if (!dateRange) {
       setShipments(allShipments);
+    } else if ('weekday' in dateRange) {
+      const filtered = allShipments.filter(s => {
+        if (!s.start) return false;
+        const shipmentDate = new Date(s.start);
+        const shipmentWeekday = shipmentDate.getDay();
+        const targetWeekday = dateRange.weekday === 0 ? 1 : dateRange.weekday + 1;
+        return shipmentWeekday === targetWeekday;
+      });
+      setShipments(filtered);
     } else {
       const filtered = allShipments.filter(s => {
         if (!s.start) return false;
