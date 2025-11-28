@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
 import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
+import { PackageManager } from './PackageManager';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const WEEK_NUMBERS = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
@@ -18,6 +19,7 @@ export function ShipmentsTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [operatorSearch, setOperatorSearch] = useState('');
   const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
+  const [packagesList, setPackagesList] = useState<string[]>([]);
 
   useEffect(() => {
     loadShipments();
@@ -143,6 +145,10 @@ export function ShipmentsTab() {
       }
       return;
     }
+
+    setAllShipments(prevShipments =>
+      prevShipments.map(s => s.id === id ? { ...s, status } : s)
+    );
 
     await supabase
       .from('shipments')
@@ -290,10 +296,15 @@ export function ShipmentsTab() {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
+    if (packagesList.length === 0) {
+      alert('Please add at least one package');
+      return;
+    }
+
     const newShipment = {
       row_id: Math.floor(Math.random() * 1000000),
       title: formData.get('title') as string,
-      sscc_numbers: formData.get('sscc_numbers') as string,
+      sscc_numbers: packagesList.join(', '),
       start: formData.get('start') as string,
       car_reg_no: formData.get('car_reg_no') as string,
       status: 'pending',
@@ -304,15 +315,30 @@ export function ShipmentsTab() {
     };
 
     try {
-      const { error } = await supabase
+      const { data: shipmentData, error: shipmentError } = await supabase
         .from('shipments')
-        .insert([newShipment]);
+        .insert([newShipment])
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (shipmentError) throw shipmentError;
+
+      const packagesData = packagesList.map(sscc => ({
+        shipment_id: shipmentData.id,
+        sscc_number: sscc,
+        status: 'pending'
+      }));
+
+      const { error: packagesError } = await supabase
+        .from('packages')
+        .insert(packagesData);
+
+      if (packagesError) throw packagesError;
 
       form.reset();
       setSelectedOperators([]);
       setOperatorSearch('');
+      setPackagesList([]);
       setShowNewShipment(false);
       loadShipments();
       alert('Delivery created successfully!');
@@ -463,12 +489,6 @@ export function ShipmentsTab() {
                   className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
                 <input
-                  type="text"
-                  name="sscc_numbers"
-                  placeholder="SSCC Numbers"
-                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <input
                   type="datetime-local"
                   name="start"
                   required
@@ -478,9 +498,14 @@ export function ShipmentsTab() {
                   type="text"
                   name="car_reg_no"
                   placeholder="Car Registration"
-                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 col-span-2"
                 />
               </div>
+
+              <PackageManager
+                packages={packagesList}
+                onChange={setPackagesList}
+              />
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Assign Operators</label>

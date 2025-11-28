@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase, Shipment, Operator } from '../lib/supabase';
-import { X, Loader2 } from 'lucide-react';
+import { supabase, Shipment, Operator, Package as PackageType } from '../lib/supabase';
+import { X, Loader2, Package } from 'lucide-react';
 
 type CompletionModalProps = {
   shipment: Shipment;
@@ -9,15 +9,18 @@ type CompletionModalProps = {
 };
 
 export function CompletionModal({ shipment, onClose, onComplete }: CompletionModalProps) {
-  const [storageLocation, setStorageLocation] = useState(shipment.storage_location || '');
+  const [packages, setPackages] = useState<PackageType[]>([]);
+  const [packageLocations, setPackageLocations] = useState<Record<string, string>>({});
   const [selectedOperators, setSelectedOperators] = useState<string[]>(shipment.assigned_operators || []);
   const [notes, setNotes] = useState(shipment.notes || '');
   const [operators, setOperators] = useState<Operator[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [loadingPackages, setLoadingPackages] = useState(true);
 
   useEffect(() => {
     loadOperators();
+    loadPackages();
   }, []);
 
   const loadOperators = async () => {
@@ -32,6 +35,30 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
     }
   };
 
+  const loadPackages = async () => {
+    const { data, error } = await supabase
+      .from('packages')
+      .select('*')
+      .eq('shipment_id', shipment.id)
+      .order('created_at');
+
+    if (error) {
+      console.error('Failed to load packages:', error);
+      setLoadingPackages(false);
+      return;
+    }
+
+    if (data) {
+      setPackages(data);
+      const locations: Record<string, string> = {};
+      data.forEach(pkg => {
+        locations[pkg.id] = pkg.storage_location || '';
+      });
+      setPackageLocations(locations);
+    }
+    setLoadingPackages(false);
+  };
+
   const toggleOperator = (operatorName: string) => {
     if (selectedOperators.includes(operatorName)) {
       setSelectedOperators(selectedOperators.filter(o => o !== operatorName));
@@ -41,8 +68,9 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
   };
 
   const handleComplete = async () => {
-    if (!storageLocation.trim()) {
-      setError('Storage location is required');
+    const missingLocations = packages.filter(pkg => !packageLocations[pkg.id]?.trim());
+    if (missingLocations.length > 0) {
+      setError(`Please specify storage location for all packages (${missingLocations.length} missing)`);
       return;
     }
 
@@ -54,25 +82,43 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
     setSaving(true);
     setError('');
 
-    const { error: updateError } = await supabase
-      .from('shipments')
-      .update({
-        storage_location: storageLocation.trim(),
-        assigned_operators: selectedOperators,
-        notes: notes.trim(),
-        status: 'completed',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', shipment.id);
+    try {
+      for (const pkg of packages) {
+        const { error: pkgError } = await supabase
+          .from('packages')
+          .update({
+            storage_location: packageLocations[pkg.id].trim(),
+            status: 'stored',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', pkg.id);
 
-    if (updateError) {
+        if (pkgError) throw pkgError;
+      }
+
+      const allLocations = packages
+        .map(pkg => `${pkg.sscc_number}: ${packageLocations[pkg.id]}`)
+        .join('; ');
+
+      const { error: updateError } = await supabase
+        .from('shipments')
+        .update({
+          storage_location: allLocations,
+          assigned_operators: selectedOperators,
+          notes: notes.trim(),
+          status: 'completed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', shipment.id);
+
+      if (updateError) throw updateError;
+
+      setSaving(false);
+      onComplete();
+    } catch (err) {
       setError('Failed to update shipment');
       setSaving(false);
-      return;
     }
-
-    setSaving(false);
-    onComplete();
   };
 
   return (
@@ -95,17 +141,32 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
           </div>
 
           <div>
-            <label htmlFor="storageLocation" className="block text-sm font-medium text-slate-700 mb-1">
-              Storage Location <span className="text-red-600">*</span>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Packages Storage Locations <span className="text-red-600">*</span>
             </label>
-            <input
-              id="storageLocation"
-              type="text"
-              value={storageLocation}
-              onChange={(e) => setStorageLocation(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="e.g., Warehouse A, Bay 12"
-            />
+            {loadingPackages ? (
+              <div className="text-sm text-slate-500 py-4 text-center">Loading packages...</div>
+            ) : packages.length === 0 ? (
+              <div className="text-sm text-slate-500 py-4 text-center">No packages found</div>
+            ) : (
+              <div className="space-y-3 max-h-64 overflow-y-auto border border-slate-200 rounded-lg p-3">
+                {packages.map((pkg) => (
+                  <div key={pkg.id} className="bg-white p-3 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Package className="w-4 h-4 text-slate-400" />
+                      <span className="text-sm font-semibold text-slate-900">{pkg.sscc_number}</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={packageLocations[pkg.id] || ''}
+                      onChange={(e) => setPackageLocations({ ...packageLocations, [pkg.id]: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      placeholder="e.g., Warehouse A, Bay 12"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -166,7 +227,7 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
           </button>
           <button
             onClick={handleComplete}
-            disabled={saving}
+            disabled={saving || loadingPackages || packages.length === 0}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}

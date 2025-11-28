@@ -39,3 +39,13 @@ export type AppSetting = {
   updated_at: string;
   created_at: string;
 };
+
+export type Package = {
+  id: string;
+  shipment_id: string;
+  sscc_number: string;
+  storage_location: string;
+  status: 'pending' | 'stored' | 'completed';
+  created_at: string;
+  updated_at: string;
+};
