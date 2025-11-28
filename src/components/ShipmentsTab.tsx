@@ -206,17 +206,58 @@ export function ShipmentsTab() {
     exportToCSV(shipments, filename);
   };
 
-  const downloadWeeklyReport = () => {
+  const getWeekRange = (weekNumber: number) => {
     const today = new Date();
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - today.getDay());
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 6);
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    monthStart.setHours(0, 0, 0, 0);
 
-    const startStr = weekStart.toISOString().split('T')[0];
-    const endStr = weekEnd.toISOString().split('T')[0];
-    const filename = `shipments-weekly-${startStr}-to-${endStr}.csv`;
-    exportToCSV(shipments, filename);
+    if (weekNumber === 1) {
+      const firstWeekEnd = new Date(monthStart);
+      const daysUntilMonday = (8 - firstWeekEnd.getDay()) % 7;
+      firstWeekEnd.setDate(monthStart.getDate() + daysUntilMonday + 6);
+      return { start: monthStart, end: firstWeekEnd };
+    } else {
+      const firstWeekEnd = new Date(monthStart);
+      const daysUntilMonday = (8 - firstWeekEnd.getDay()) % 7;
+      firstWeekEnd.setDate(monthStart.getDate() + daysUntilMonday + 6);
+
+      const weekStart = new Date(firstWeekEnd);
+      weekStart.setDate(firstWeekEnd.getDate() + 1 + (weekNumber - 2) * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      return { start: weekStart, end: weekEnd };
+    }
+  };
+
+  const downloadWeekReport = (weekNumber: number) => {
+    const { start, end } = getWeekRange(weekNumber);
+
+    const weekShipments = allShipments.filter(s => {
+      if (!s.start) return false;
+      const shipmentDate = new Date(s.start);
+      return shipmentDate >= start && shipmentDate <= end;
+    });
+
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+    const filename = `shipments-week${weekNumber}-${startStr}-to-${endStr}.csv`;
+    exportToCSV(weekShipments, filename);
+  };
+
+  const downloadMonthlyReport = () => {
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    const monthShipments = allShipments.filter(s => {
+      if (!s.start) return false;
+      const shipmentDate = new Date(s.start);
+      return shipmentDate >= monthStart && shipmentDate <= monthEnd;
+    });
+
+    const monthName = monthStart.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+    const filename = `shipments-${monthName.replace(' ', '-')}.csv`;
+    exportToCSV(monthShipments, filename);
   };
 
   const deleteShipment = async (id: string) => {
@@ -354,14 +395,48 @@ export function ShipmentsTab() {
               <Download className="w-4 h-4" />
               Daily
             </button>
-            <button
-              onClick={downloadWeeklyReport}
-              disabled={shipments.length === 0}
-              className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
-            >
-              <Download className="w-4 h-4" />
-              Weekly
-            </button>
+            <div className="relative group">
+              <button
+                disabled={allShipments.length === 0}
+                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+              >
+                <Download className="w-4 h-4" />
+                Reports
+              </button>
+              <div className="absolute right-0 top-full mt-1 bg-white shadow-lg rounded-lg py-1 min-w-[160px] hidden group-hover:block z-10 border border-slate-200">
+                <button
+                  onClick={() => downloadWeekReport(1)}
+                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Week 1
+                </button>
+                <button
+                  onClick={() => downloadWeekReport(2)}
+                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Week 2
+                </button>
+                <button
+                  onClick={() => downloadWeekReport(3)}
+                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Week 3
+                </button>
+                <button
+                  onClick={() => downloadWeekReport(4)}
+                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  Week 4
+                </button>
+                <div className="border-t border-slate-200 my-1"></div>
+                <button
+                  onClick={downloadMonthlyReport}
+                  className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 font-medium"
+                >
+                  Full Month
+                </button>
+              </div>
+            </div>
             <button
               onClick={clearAllShipments}
               disabled={allShipments.length === 0}
@@ -406,19 +481,19 @@ export function ShipmentsTab() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Assign Operators</label>
-                <div className="grid grid-cols-2 gap-2">
+                <select
+                  name="operators"
+                  multiple
+                  size={5}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
                   {operators.map((op) => (
-                    <label key={op.id} className="flex items-center gap-2 p-2 bg-white rounded border border-slate-200 hover:border-blue-400 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        name="operators"
-                        value={op.name}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <span className="text-sm text-slate-700">{op.name}</span>
-                    </label>
+                    <option key={op.id} value={op.name} className="py-1">
+                      {op.name}
+                    </option>
                   ))}
-                </div>
+                </select>
+                <p className="text-xs text-slate-500 mt-1">Hold Ctrl/Cmd to select multiple operators</p>
               </div>
 
               <div className="flex gap-2">
