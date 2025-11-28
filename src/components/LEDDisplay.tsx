@@ -38,30 +38,13 @@ export function LEDDisplay() {
     return () => clearInterval(interval);
   }, [shipments]);
 
-  const getTodayDateRange = () => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    return {
-      start: today.toISOString(),
-      end: tomorrow.toISOString()
-    };
-  };
-
   const loadShipments = async () => {
     try {
-      const dateRange = getTodayDateRange();
-
       const { data, error } = await supabase
         .from('shipments')
         .select('*')
         .eq('archived', false)
         .neq('status', 'completed')
-        .gte('start', dateRange.start)
-        .lt('start', dateRange.end)
-        .order('status', { ascending: true })
         .order('start', { ascending: true });
 
       if (error) throw error;

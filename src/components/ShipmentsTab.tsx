@@ -16,6 +16,8 @@ export function ShipmentsTab() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showNewShipment, setShowNewShipment] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [operatorSearch, setOperatorSearch] = useState('');
+  const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
 
   useEffect(() => {
     loadShipments();
@@ -286,9 +288,6 @@ export function ShipmentsTab() {
   const createShipment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const formData = new FormData(form);
-
-    const selectedOperators = Array.from(formData.getAll('operators')) as string[];
 
     const newShipment = {
       row_id: Math.floor(Math.random() * 1000000),
@@ -311,6 +310,8 @@ export function ShipmentsTab() {
       if (error) throw error;
 
       form.reset();
+      setSelectedOperators([]);
+      setOperatorSearch('');
       setShowNewShipment(false);
       loadShipments();
       alert('Delivery created successfully!');
@@ -482,19 +483,64 @@ export function ShipmentsTab() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Assign Operators</label>
-                <select
-                  name="operators"
-                  multiple
-                  size={5}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  {operators.map((op) => (
-                    <option key={op.id} value={op.name} className="py-1">
-                      {op.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-500 mt-1">Hold Ctrl/Cmd to select multiple operators</p>
+                <input
+                  type="text"
+                  placeholder="Search operators..."
+                  value={operatorSearch}
+                  onChange={(e) => setOperatorSearch(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 mb-2"
+                />
+                <div className="bg-white border border-slate-300 rounded-lg p-3 max-h-60 overflow-y-auto">
+                  {selectedOperators.length > 0 && (
+                    <div className="mb-3 pb-3 border-b border-slate-200">
+                      <div className="text-xs font-medium text-slate-500 mb-2">Selected ({selectedOperators.length})</div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedOperators.map((opName) => (
+                          <button
+                            key={opName}
+                            type="button"
+                            onClick={() => setSelectedOperators(selectedOperators.filter(n => n !== opName))}
+                            className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium hover:bg-blue-200 flex items-center gap-1"
+                          >
+                            {opName}
+                            <X className="w-3 h-3" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    {operators
+                      .filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase()))
+                      .map((op) => (
+                        <label
+                          key={op.id}
+                          className={`flex items-center gap-2 p-2 rounded border-2 cursor-pointer transition-all ${
+                            selectedOperators.includes(op.name)
+                              ? 'bg-blue-50 border-blue-500'
+                              : 'bg-white border-slate-200 hover:border-blue-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedOperators.includes(op.name)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedOperators([...selectedOperators, op.name]);
+                              } else {
+                                setSelectedOperators(selectedOperators.filter(n => n !== op.name));
+                              }
+                            }}
+                            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-slate-700 font-medium">{op.name}</span>
+                        </label>
+                      ))}
+                  </div>
+                  {operators.filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase())).length === 0 && (
+                    <div className="text-center text-slate-500 text-sm py-4">No operators found</div>
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-2">
@@ -506,7 +552,11 @@ export function ShipmentsTab() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowNewShipment(false)}
+                  onClick={() => {
+                    setShowNewShipment(false);
+                    setSelectedOperators([]);
+                    setOperatorSearch('');
+                  }}
                   className="px-4 py-2 bg-slate-300 text-slate-700 rounded-lg hover:bg-slate-400"
                 >
                   Cancel
