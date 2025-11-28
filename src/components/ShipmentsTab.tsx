@@ -1,0 +1,675 @@
+import { useState, useEffect } from 'react';
+import { supabase, Shipment } from '../lib/supabase';
+import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X } from 'lucide-react';
+import { CompletionModal } from './CompletionModal';
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const WEEK_NUMBERS = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
+
+export function ShipmentsTab() {
+  const [allShipments, setAllShipments] = useState<Shipment[]>([]);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [operators, setOperators] = useState<Array<{ id: string; name: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('all');
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [showNewShipment, setShowNewShipment] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadShipments();
+    loadOperators();
+    setupRealtimeSubscription();
+  }, []);
+
+  useEffect(() => {
+    filterShipments();
+  }, [selectedDate, allShipments]);
+
+  const getDateRangeForFilter = (filter: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (filter === 'all') {
+      return null;
+    }
+
+    if (filter === 'today') {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return { start: today, end: tomorrow };
+    }
+
+    const dayIndex = WEEKDAYS.indexOf(filter);
+    if (dayIndex !== -1) {
+      const currentDay = today.getDay();
+      const daysToAdd = dayIndex - (currentDay === 0 ? 6 : currentDay - 1);
+      const selectedDate = new Date(today);
+      selectedDate.setDate(selectedDate.getDate() + daysToAdd);
+
+      const nextDay = new Date(selectedDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      return { start: selectedDate, end: nextDay };
+    }
+
+    const weekIndex = WEEK_NUMBERS.indexOf(filter);
+    if (weekIndex !== -1) {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      monthStart.setHours(0, 0, 0, 0);
+      const weekStart = new Date(monthStart);
+      weekStart.setDate(monthStart.getDate() + weekIndex * 7);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 7);
+      return { start: weekStart, end: weekEnd };
+    }
+
+    if (filter === 'monthly') {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      monthStart.setHours(0, 0, 0, 0);
+      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+      return { start: monthStart, end: monthEnd };
+    }
+
+    return null;
+  };
+
+  const filterShipments = () => {
+    const dateRange = getDateRangeForFilter(selectedDate);
+
+    if (!dateRange) {
+      setShipments(allShipments);
+    } else {
+      const filtered = allShipments.filter(s => {
+        if (!s.start) return false;
+        const shipmentDate = new Date(s.start);
+        return shipmentDate >= dateRange.start && shipmentDate < dateRange.end;
+      });
+      setShipments(filtered);
+    }
+  };
+
+  const loadShipments = async () => {
+    const { data } = await supabase
+      .from('shipments')
+      .select('*')
+      .eq('archived', false)
+      .order('start', { ascending: true });
+
+    if (data) {
+      setAllShipments(data);
+      filterShipments();
+    }
+    setLoading(false);
+  };
+
+  const loadOperators = async () => {
+    const { data } = await supabase
+      .from('operators')
+      .select('id, name')
+      .eq('active', true)
+      .order('name');
+
+    if (data) {
+      setOperators(data);
+    }
+  };
+
+  const setupRealtimeSubscription = () => {
+    const channel = supabase
+      .channel('shipments-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shipments' },
+        () => {
+          loadShipments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
+
+
+  const updateStatus = async (id: string, status: 'pending' | 'in_progress' | 'completed') => {
+    if (status === 'completed') {
+      const shipment = shipments.find(s => s.id === id);
+      if (shipment) {
+        setSelectedShipment(shipment);
+      }
+      return;
+    }
+
+    await supabase
+      .from('shipments')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id);
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-amber-100 text-amber-800';
+      case 'in_progress': return 'bg-blue-100 text-blue-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      default: return 'bg-slate-100 text-slate-800';
+    }
+  };
+
+  const exportToCSV = (data: Shipment[], filename: string) => {
+    const headers = ['Title', 'SSCC Numbers', 'Arrival Time', 'Vehicle Reg', 'Operators', 'Status', 'Storage Location', 'Notes'];
+
+    const rows = data.map(shipment => [
+      shipment.title,
+      shipment.sscc_numbers,
+      formatDate(shipment.start),
+      shipment.car_reg_no,
+      shipment.assigned_operators.join('; '),
+      shipment.status,
+      shipment.storage_location,
+      shipment.notes
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadDailyReport = () => {
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+    const filename = `shipments-daily-${dateStr}.csv`;
+    exportToCSV(shipments, filename);
+  };
+
+  const downloadWeeklyReport = () => {
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+
+    const startStr = weekStart.toISOString().split('T')[0];
+    const endStr = weekEnd.toISOString().split('T')[0];
+    const filename = `shipments-weekly-${startStr}-to-${endStr}.csv`;
+    exportToCSV(shipments, filename);
+  };
+
+  const deleteShipment = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this delivery?')) {
+      return;
+    }
+
+    setDeleting(id);
+    try {
+      const { error } = await supabase
+        .from('shipments')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setAllShipments(allShipments.filter(s => s.id !== id));
+    } catch (err) {
+      console.error('Failed to delete shipment:', err);
+      alert('Failed to delete delivery');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const createShipment = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    const selectedOperators = Array.from(formData.getAll('operators')) as string[];
+
+    const newShipment = {
+      row_id: Math.floor(Math.random() * 1000000),
+      title: formData.get('title') as string,
+      sscc_numbers: formData.get('sscc_numbers') as string,
+      start: formData.get('start') as string,
+      car_reg_no: formData.get('car_reg_no') as string,
+      status: 'pending',
+      archived: false,
+      assigned_operators: selectedOperators,
+      storage_location: '',
+      notes: ''
+    };
+
+    try {
+      const { error } = await supabase
+        .from('shipments')
+        .insert([newShipment]);
+
+      if (error) throw error;
+
+      setShowNewShipment(false);
+      (e.currentTarget as HTMLFormElement).reset();
+      loadShipments();
+      alert('Delivery created successfully!');
+    } catch (err) {
+      console.error('Failed to create shipment:', err);
+      alert('Failed to create delivery: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  const updateShipment = async (id: string, e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    const updates = {
+      title: formData.get('title') as string,
+      sscc_numbers: formData.get('sscc_numbers') as string,
+      start: formData.get('start') as string,
+      car_reg_no: formData.get('car_reg_no') as string,
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      const { error } = await supabase
+        .from('shipments')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setEditingId(null);
+      loadShipments();
+      alert('Delivery updated successfully!');
+    } catch (err) {
+      console.error('Failed to update shipment:', err);
+      alert('Failed to update delivery');
+    }
+  };
+
+  const clearAllShipments = async () => {
+    if (!window.confirm('Are you sure you want to delete ALL deliveries? This cannot be undone!')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('shipments')
+        .delete()
+        .eq('archived', false);
+
+      if (error) throw error;
+
+      setAllShipments([]);
+      setShipments([]);
+      alert('All deliveries cleared!');
+    } catch (err) {
+      console.error('Failed to clear shipments:', err);
+      alert('Failed to clear deliveries');
+    }
+  };
+
+  if (loading) {
+    return <div className="text-slate-600">Loading shipments...</div>;
+  }
+
+  return (
+    <>
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-slate-900">Shipments</h2>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowNewShipment(!showNewShipment)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              New Delivery
+            </button>
+            <button
+              onClick={downloadDailyReport}
+              disabled={shipments.length === 0}
+              className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+            >
+              <Download className="w-4 h-4" />
+              Daily
+            </button>
+            <button
+              onClick={downloadWeeklyReport}
+              disabled={shipments.length === 0}
+              className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+            >
+              <Download className="w-4 h-4" />
+              Weekly
+            </button>
+            <button
+              onClick={clearAllShipments}
+              disabled={allShipments.length === 0}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+            >
+              <Trash2 className="w-4 h-4" />
+              Clear All
+            </button>
+          </div>
+        </div>
+
+        {showNewShipment && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <form onSubmit={createShipment} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  name="title"
+                  placeholder="Delivery Title"
+                  required
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="text"
+                  name="sscc_numbers"
+                  placeholder="SSCC Numbers"
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="datetime-local"
+                  name="start"
+                  required
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  type="text"
+                  name="car_reg_no"
+                  placeholder="Car Registration"
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Assign Operators</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {operators.map((op) => (
+                    <label key={op.id} className="flex items-center gap-2 p-2 bg-white rounded border border-slate-200 hover:border-blue-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="operators"
+                        value={op.name}
+                        className="w-4 h-4 text-blue-600 rounded"
+                      />
+                      <span className="text-sm text-slate-700">{op.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Create Delivery
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNewShipment(false)}
+                  className="px-4 py-2 bg-slate-300 text-slate-700 rounded-lg hover:bg-slate-400"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          <button
+            onClick={() => setSelectedDate('all')}
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+              selectedDate === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setSelectedDate('today')}
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+              selectedDate === 'today'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Today
+          </button>
+          {WEEKDAYS.map((day) => (
+            <button
+              key={day}
+              onClick={() => setSelectedDate(day)}
+              className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                selectedDate === day
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              {day}
+            </button>
+          ))}
+          {WEEK_NUMBERS.map((week) => (
+            <button
+              key={week}
+              onClick={() => setSelectedDate(week)}
+              className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                selectedDate === week
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              {week}
+            </button>
+          ))}
+          <button
+            onClick={() => setSelectedDate('monthly')}
+            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+              selectedDate === 'monthly'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            Monthly
+          </button>
+        </div>
+
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+          <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium mb-1">Automatic Syncing Enabled</p>
+            <p>Google Sheets data is automatically synced every 2 minutes. New shipments will appear here automatically.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Title</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Arrival</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Car Reg</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Operators</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Status</th>
+              <th className="px-4 py-3 text-right text-sm font-medium text-slate-700">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200">
+            {shipments.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                  No shipments found. Click "Sync with Sheet" to import data.
+                </td>
+              </tr>
+            ) : (
+              shipments.map((shipment) => (
+                <tr key={shipment.id} className={editingId === shipment.id ? 'bg-blue-50' : 'hover:bg-slate-50'}>
+                  {editingId === shipment.id ? (
+                    <>
+                      <td colSpan={6} className="px-4 py-3">
+                        <form onSubmit={(e) => updateShipment(shipment.id, e)} className="grid grid-cols-6 gap-2">
+                          <input
+                            type="text"
+                            name="title"
+                            defaultValue={shipment.title}
+                            placeholder="Title"
+                            required
+                            className="px-2 py-1 border border-slate-300 rounded text-sm"
+                          />
+                          <input
+                            type="text"
+                            name="sscc_numbers"
+                            defaultValue={shipment.sscc_numbers}
+                            placeholder="SSCC"
+                            className="px-2 py-1 border border-slate-300 rounded text-sm"
+                          />
+                          <input
+                            type="datetime-local"
+                            name="start"
+                            defaultValue={shipment.start ? new Date(shipment.start).toISOString().slice(0, 16) : ''}
+                            required
+                            className="px-2 py-1 border border-slate-300 rounded text-sm"
+                          />
+                          <input
+                            type="text"
+                            name="car_reg_no"
+                            defaultValue={shipment.car_reg_no}
+                            placeholder="Reg"
+                            className="px-2 py-1 border border-slate-300 rounded text-sm"
+                          />
+                          <button
+                            type="submit"
+                            className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                            className="px-3 py-1 text-sm bg-slate-300 text-slate-700 rounded hover:bg-slate-400"
+                          >
+                            Cancel
+                          </button>
+                        </form>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <Package className="w-4 h-4 text-slate-400" />
+                          <span className="text-sm font-medium text-slate-900">{shipment.title}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {formatDate(shipment.start)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {shipment.car_reg_no}
+                      </td>
+                      <td className="px-4 py-3">
+                        {shipment.assigned_operators.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {shipment.assigned_operators.map((op, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs"
+                              >
+                                {op}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(shipment.status)}`}>
+                          {shipment.status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
+                          {shipment.status === 'in_progress' && <Clock className="w-3 h-3" />}
+                          {shipment.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          {shipment.status === 'pending' && (
+                            <button
+                              onClick={() => updateStatus(shipment.id, 'in_progress')}
+                              className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded"
+                            >
+                              Start
+                            </button>
+                          )}
+                          {shipment.status !== 'completed' && (
+                            <button
+                              onClick={() => updateStatus(shipment.id, 'completed')}
+                              className="px-3 py-1 text-sm text-green-600 hover:bg-green-50 rounded"
+                            >
+                              Complete
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setEditingId(shipment.id)}
+                            className="px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded"
+                            title="Edit delivery"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteShipment(shipment.id)}
+                            disabled={deleting === shipment.id}
+                            className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Delete delivery"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selectedShipment && (
+        <CompletionModal
+          shipment={selectedShipment}
+          onClose={() => setSelectedShipment(null)}
+          onComplete={() => {
+            setSelectedShipment(null);
+            loadShipments();
+          }}
+        />
+      )}
+    </>
+  );
+}
