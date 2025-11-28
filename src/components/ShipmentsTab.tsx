@@ -288,6 +288,7 @@ export function ShipmentsTab() {
   const createShipment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
+    const formData = new FormData(form);
 
     const newShipment = {
       row_id: Math.floor(Math.random() * 1000000),

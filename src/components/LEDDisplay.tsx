@@ -15,6 +15,7 @@ export function LEDDisplay() {
 
   useEffect(() => {
     loadShipments();
+    setupRealtimeSubscription();
 
     refreshIntervalRef.current = setInterval(() => {
       loadShipments();
@@ -26,6 +27,23 @@ export function LEDDisplay() {
       }
     };
   }, []);
+
+  const setupRealtimeSubscription = () => {
+    const channel = supabase
+      .channel('shipments-led-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shipments' },
+        () => {
+          loadShipments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
 
   useEffect(() => {
     const totalPages = Math.ceil(shipments.length / PAGE_SIZE);
