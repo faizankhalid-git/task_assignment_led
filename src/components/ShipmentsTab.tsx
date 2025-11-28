@@ -285,7 +285,8 @@ export function ShipmentsTab() {
 
   const createShipment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
 
     const selectedOperators = Array.from(formData.getAll('operators')) as string[];
 
@@ -309,8 +310,8 @@ export function ShipmentsTab() {
 
       if (error) throw error;
 
+      form.reset();
       setShowNewShipment(false);
-      (e.currentTarget as HTMLFormElement).reset();
       loadShipments();
       alert('Delivery created successfully!');
     } catch (err) {
