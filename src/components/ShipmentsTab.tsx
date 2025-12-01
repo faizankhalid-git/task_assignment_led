@@ -7,6 +7,30 @@ import { PackageManager } from './PackageManager';
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const WEEK_NUMBERS = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
 
+const getCurrentWeekStart = () => {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+};
+
+const getWeekdayDate = (weekdayIndex: number) => {
+  const weekStart = getCurrentWeekStart();
+  const date = new Date(weekStart);
+  date.setDate(weekStart.getDate() + weekdayIndex);
+  return date;
+};
+
+const formatWeekdayLabel = (weekday: string, index: number) => {
+  const date = getWeekdayDate(index);
+  const day = date.getDate();
+  const month = date.toLocaleString('en-GB', { month: 'short' });
+  return `${weekday} ${day} ${month}`;
+};
+
 export function ShipmentsTab() {
   const [allShipments, setAllShipments] = useState<Shipment[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
@@ -45,9 +69,15 @@ export function ShipmentsTab() {
       return { start: today, end: tomorrow };
     }
 
-    const dayIndex = WEEKDAYS.indexOf(filter);
-    if (dayIndex !== -1) {
-      return { weekday: dayIndex };
+    if (filter.startsWith('Monday') || filter.startsWith('Tuesday') || filter.startsWith('Wednesday') || filter.startsWith('Thursday') || filter.startsWith('Friday')) {
+      const weekdayName = filter.split(' ')[0];
+      const dayIndex = WEEKDAYS.indexOf(weekdayName);
+      if (dayIndex !== -1) {
+        const targetDate = getWeekdayDate(dayIndex);
+        const nextDay = new Date(targetDate);
+        nextDay.setDate(targetDate.getDate() + 1);
+        return { start: targetDate, end: nextDay };
+      }
     }
 
     const weekIndex = WEEK_NUMBERS.indexOf(filter);
@@ -76,15 +106,6 @@ export function ShipmentsTab() {
 
     if (!dateRange) {
       setShipments(allShipments);
-    } else if ('weekday' in dateRange) {
-      const filtered = allShipments.filter(s => {
-        if (!s.start) return false;
-        const shipmentDate = new Date(s.start);
-        const shipmentWeekday = shipmentDate.getDay();
-        const targetWeekday = dateRange.weekday === 0 ? 1 : dateRange.weekday + 1;
-        return shipmentWeekday === targetWeekday;
-      });
-      setShipments(filtered);
     } else {
       const filtered = allShipments.filter(s => {
         if (!s.start) return false;
@@ -379,6 +400,75 @@ export function ShipmentsTab() {
     }
   };
 
+  const exportToGoogleSheets = async () => {
+    try {
+      const { data: settings } = await supabase
+        .from('app_settings')
+        .select('*')
+        .in('key', ['spreadsheet_id', 'worksheet_name']);
+
+      if (!settings || settings.length === 0) {
+        alert('Please configure Google Sheets in Settings first');
+        return;
+      }
+
+      const spreadsheetId = settings.find(s => s.key === 'spreadsheet_id')?.value;
+      const worksheetName = settings.find(s => s.key === 'worksheet_name')?.value || 'Live';
+
+      if (!spreadsheetId) {
+        alert('Spreadsheet ID not configured');
+        return;
+      }
+
+      const backupWorksheetName = 'Backup';
+
+      const backupData = allShipments.map(s => ({
+        sscc_numbers: s.sscc_numbers,
+        title: s.title,
+        start: s.start ? new Date(s.start).toLocaleString('en-GB') : '',
+        car_reg_no: s.car_reg_no,
+        storage_location: s.storage_location,
+        assigned_operators: s.assigned_operators.join(', '),
+        notes: s.notes,
+        status: s.status,
+        updated_at: new Date(s.updated_at).toLocaleString('en-GB')
+      }));
+
+      const headers = ['SSCC Numbers', 'Title', 'Arrival Time', 'Car Reg No', 'Storage Location', 'Assigned Operators', 'Notes', 'Status', 'Updated At'];
+      const rows = backupData.map(d => [
+        d.sscc_numbers,
+        d.title,
+        d.start,
+        d.car_reg_no,
+        d.storage_location,
+        d.assigned_operators,
+        d.notes,
+        d.status,
+        d.updated_at
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      alert(`Backup data prepared! Note: Direct upload to Google Sheets requires API credentials.\n\nFor now, the backup will be downloaded as CSV. You can manually upload it to a "Backup" worksheet in your Google Sheet.\n\nWorksheet: ${backupWorksheetName}\nSpreadsheet ID: ${spreadsheetId}`);
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `backup-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Failed to export backup:', err);
+      alert('Failed to create backup export');
+    }
+  };
+
   const clearAllShipments = async () => {
     if (!window.confirm('Are you sure you want to delete ALL deliveries? This cannot be undone!')) {
       return;
@@ -468,6 +558,14 @@ export function ShipmentsTab() {
                 </button>
               </div>
             </div>
+            <button
+              onClick={exportToGoogleSheets}
+              disabled={allShipments.length === 0}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 text-sm"
+            >
+              <Download className="w-4 h-4" />
+              Backup
+            </button>
             <button
               onClick={clearAllShipments}
               disabled={allShipments.length === 0}
@@ -615,19 +713,22 @@ export function ShipmentsTab() {
           >
             Today
           </button>
-          {WEEKDAYS.map((day) => (
-            <button
-              key={day}
-              onClick={() => setSelectedDate(day)}
-              className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
-                selectedDate === day
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              {day}
-            </button>
-          ))}
+          {WEEKDAYS.map((day, index) => {
+            const label = formatWeekdayLabel(day, index);
+            return (
+              <button
+                key={day}
+                onClick={() => setSelectedDate(label)}
+                className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
+                  selectedDate === label
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
           {WEEK_NUMBERS.map((week) => (
             <button
               key={week}
