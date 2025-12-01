@@ -452,7 +452,19 @@ export function ShipmentsTab() {
         ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
       ].join('\n');
 
-      alert(`Backup data prepared! Note: Direct upload to Google Sheets requires API credentials.\n\nFor now, the backup will be downloaded as CSV. You can manually upload it to a "Backup" worksheet in your Google Sheet.\n\nWorksheet: ${backupWorksheetName}\nSpreadsheet ID: ${spreadsheetId}`);
+      const confirmation = window.confirm(
+        `📊 Backup Export\n\n` +
+        `This will download all ${allShipments.length} deliveries as a CSV file.\n\n` +
+        `To complete the backup:\n` +
+        `1. Download the CSV file\n` +
+        `2. Open your Google Sheet (ID: ${spreadsheetId.slice(0, 20)}...)\n` +
+        `3. Create a worksheet named "Backup" if it doesn't exist\n` +
+        `4. Import this CSV file to the Backup worksheet\n\n` +
+        `Note: Direct upload to Google Sheets requires OAuth credentials which are not configured.\n\n` +
+        `Continue with download?`
+      );
+
+      if (!confirmation) return;
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
@@ -524,7 +536,7 @@ export function ShipmentsTab() {
                 <Download className="w-4 h-4" />
                 Reports
               </button>
-              <div className="absolute right-0 top-full mt-1 bg-white shadow-lg rounded-lg py-1 min-w-[160px] hidden group-hover:block z-10 border border-slate-200">
+              <div className="absolute right-0 top-full mt-1 bg-white shadow-lg rounded-lg py-1 min-w-[160px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 border border-slate-200">
                 <button
                   onClick={() => downloadWeekReport(1)}
                   className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
@@ -788,49 +800,106 @@ export function ShipmentsTab() {
                   {editingId === shipment.id ? (
                     <>
                       <td colSpan={6} className="px-4 py-3">
-                        <form onSubmit={(e) => updateShipment(shipment.id, e)} className="grid grid-cols-6 gap-2">
-                          <input
-                            type="text"
-                            name="title"
-                            defaultValue={shipment.title}
-                            placeholder="Title"
-                            required
-                            className="px-2 py-1 border border-slate-300 rounded text-sm"
-                          />
-                          <input
-                            type="text"
-                            name="sscc_numbers"
-                            defaultValue={shipment.sscc_numbers}
-                            placeholder="SSCC"
-                            className="px-2 py-1 border border-slate-300 rounded text-sm"
-                          />
-                          <input
-                            type="datetime-local"
-                            name="start"
-                            defaultValue={shipment.start ? new Date(shipment.start).toISOString().slice(0, 16) : ''}
-                            required
-                            className="px-2 py-1 border border-slate-300 rounded text-sm"
-                          />
-                          <input
-                            type="text"
-                            name="car_reg_no"
-                            defaultValue={shipment.car_reg_no}
-                            placeholder="Reg"
-                            className="px-2 py-1 border border-slate-300 rounded text-sm"
-                          />
-                          <button
-                            type="submit"
-                            className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingId(null)}
-                            className="px-3 py-1 text-sm bg-slate-300 text-slate-700 rounded hover:bg-slate-400"
-                          >
-                            Cancel
-                          </button>
+                        <form onSubmit={(e) => updateShipment(shipment.id, e)} className="space-y-3">
+                          <div className="grid grid-cols-4 gap-2">
+                            <input
+                              type="text"
+                              name="title"
+                              defaultValue={shipment.title}
+                              placeholder="Title"
+                              required
+                              className="px-2 py-1 border border-slate-300 rounded text-sm"
+                            />
+                            <input
+                              type="text"
+                              name="sscc_numbers"
+                              defaultValue={shipment.sscc_numbers}
+                              placeholder="SSCC"
+                              className="px-2 py-1 border border-slate-300 rounded text-sm"
+                            />
+                            <input
+                              type="datetime-local"
+                              name="start"
+                              defaultValue={shipment.start ? new Date(shipment.start).toISOString().slice(0, 16) : ''}
+                              required
+                              className="px-2 py-1 border border-slate-300 rounded text-sm"
+                            />
+                            <input
+                              type="text"
+                              name="car_reg_no"
+                              defaultValue={shipment.car_reg_no}
+                              placeholder="Reg"
+                              className="px-2 py-1 border border-slate-300 rounded text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Assign Operators</label>
+                            <div className="bg-white border border-slate-300 rounded-lg p-2 max-h-40 overflow-y-auto">
+                              {selectedOperators.length > 0 && (
+                                <div className="mb-2 pb-2 border-b border-slate-200">
+                                  <div className="flex flex-wrap gap-1">
+                                    {selectedOperators.map((opName) => (
+                                      <button
+                                        key={opName}
+                                        type="button"
+                                        onClick={() => setSelectedOperators(selectedOperators.filter(n => n !== opName))}
+                                        className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium hover:bg-blue-200 flex items-center gap-1"
+                                      >
+                                        {opName}
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              <div className="grid grid-cols-3 gap-1">
+                                {operators.map((op) => (
+                                  <label
+                                    key={op.id}
+                                    className={`flex items-center gap-1 p-1 rounded border cursor-pointer text-xs ${
+                                      selectedOperators.includes(op.name)
+                                        ? 'bg-blue-50 border-blue-500'
+                                        : 'bg-white border-slate-200 hover:border-blue-300'
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedOperators.includes(op.name)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedOperators([...selectedOperators, op.name]);
+                                        } else {
+                                          setSelectedOperators(selectedOperators.filter(n => n !== op.name));
+                                        }
+                                      }}
+                                      className="w-3 h-3 text-blue-600 rounded"
+                                    />
+                                    <span className="text-slate-700 font-medium">{op.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              type="submit"
+                              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingId(null);
+                                setSelectedOperators([]);
+                              }}
+                              className="px-3 py-1 text-sm bg-slate-300 text-slate-700 rounded hover:bg-slate-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
                         </form>
                       </td>
                     </>
@@ -890,7 +959,10 @@ export function ShipmentsTab() {
                             </button>
                           )}
                           <button
-                            onClick={() => setEditingId(shipment.id)}
+                            onClick={() => {
+                              setEditingId(shipment.id);
+                              setSelectedOperators(shipment.assigned_operators || []);
+                            }}
                             className="px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded"
                             title="Edit delivery"
                           >
