@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
-import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X } from 'lucide-react';
+import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X, Search } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
 
@@ -44,6 +44,7 @@ export function ShipmentsTab() {
   const [operatorSearch, setOperatorSearch] = useState('');
   const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
   const [packagesList, setPackagesList] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadShipments();
@@ -53,7 +54,7 @@ export function ShipmentsTab() {
 
   useEffect(() => {
     filterShipments();
-  }, [selectedDate, allShipments]);
+  }, [selectedDate, allShipments, searchQuery]);
 
   const getDateRangeForFilter = (filter: string) => {
     const today = new Date();
@@ -102,18 +103,27 @@ export function ShipmentsTab() {
   };
 
   const filterShipments = () => {
-    const dateRange = getDateRangeForFilter(selectedDate);
+    let filtered = allShipments;
 
-    if (!dateRange) {
-      setShipments(allShipments);
-    } else {
-      const filtered = allShipments.filter(s => {
+    const dateRange = getDateRangeForFilter(selectedDate);
+    if (dateRange) {
+      filtered = filtered.filter(s => {
         if (!s.start) return false;
         const shipmentDate = new Date(s.start);
         return shipmentDate >= dateRange.start && shipmentDate < dateRange.end;
       });
-      setShipments(filtered);
     }
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(s =>
+        s.sscc_numbers?.toLowerCase().includes(query) ||
+        s.title?.toLowerCase().includes(query) ||
+        s.car_reg_no?.toLowerCase().includes(query)
+      );
+    }
+
+    setShipments(filtered);
   };
 
   const loadShipments = async () => {
@@ -380,6 +390,7 @@ export function ShipmentsTab() {
       sscc_numbers: formData.get('sscc_numbers') as string,
       start: formData.get('start') as string,
       car_reg_no: formData.get('car_reg_no') as string,
+      assigned_operators: selectedOperators,
       updated_at: new Date().toISOString()
     };
 
@@ -392,6 +403,7 @@ export function ShipmentsTab() {
       if (error) throw error;
 
       setEditingId(null);
+      setSelectedOperators([]);
       loadShipments();
       alert('Delivery updated successfully!');
     } catch (err) {
@@ -402,71 +414,39 @@ export function ShipmentsTab() {
 
   const exportToGoogleSheets = async () => {
     try {
-      const { data: settings } = await supabase
-        .from('app_settings')
-        .select('*')
-        .in('key', ['spreadsheet_id', 'worksheet_name']);
-
-      if (!settings || settings.length === 0) {
-        alert('Please configure Google Sheets in Settings first');
+      if (allShipments.length === 0) {
+        alert('No deliveries to backup');
         return;
       }
 
-      const spreadsheetId = settings.find(s => s.key === 'spreadsheet_id')?.value;
-      const worksheetName = settings.find(s => s.key === 'worksheet_name')?.value || 'Live';
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/backup-to-sheets`;
+      const headers = {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      };
 
-      if (!spreadsheetId) {
-        alert('Spreadsheet ID not configured');
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers
+      });
+      const result = await response.json();
+
+      if (!result.success) {
+        alert(`Backup failed: ${result.error}`);
         return;
       }
 
-      const backupWorksheetName = 'Backup';
-
-      const backupData = allShipments.map(s => ({
-        sscc_numbers: s.sscc_numbers,
-        title: s.title,
-        start: s.start ? new Date(s.start).toLocaleString('en-GB') : '',
-        car_reg_no: s.car_reg_no,
-        storage_location: s.storage_location,
-        assigned_operators: s.assigned_operators.join(', '),
-        notes: s.notes,
-        status: s.status,
-        updated_at: new Date(s.updated_at).toLocaleString('en-GB')
-      }));
-
-      const headers = ['SSCC Numbers', 'Title', 'Arrival Time', 'Car Reg No', 'Storage Location', 'Assigned Operators', 'Notes', 'Status', 'Updated At'];
-      const rows = backupData.map(d => [
-        d.sscc_numbers,
-        d.title,
-        d.start,
-        d.car_reg_no,
-        d.storage_location,
-        d.assigned_operators,
-        d.notes,
-        d.status,
-        d.updated_at
-      ]);
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(','))
-      ].join('\n');
-
+      const instructions = result.instructions.join('\n');
       const confirmation = window.confirm(
-        `📊 Backup Export\n\n` +
-        `This will download all ${allShipments.length} deliveries as a CSV file.\n\n` +
-        `To complete the backup:\n` +
-        `1. Download the CSV file\n` +
-        `2. Open your Google Sheet (ID: ${spreadsheetId.slice(0, 20)}...)\n` +
-        `3. Create a worksheet named "Backup" if it doesn't exist\n` +
-        `4. Import this CSV file to the Backup worksheet\n\n` +
-        `Note: Direct upload to Google Sheets requires OAuth credentials which are not configured.\n\n` +
-        `Continue with download?`
+        `📊 Backup Ready\n\n` +
+        `Prepared ${result.count} deliveries for backup.\n\n` +
+        `${instructions}\n\n` +
+        `Download CSV now?`
       );
 
       if (!confirmation) return;
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([result.csv], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
@@ -475,9 +455,11 @@ export function ShipmentsTab() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+
+      alert('Backup CSV downloaded successfully!');
     } catch (err) {
       console.error('Failed to export backup:', err);
-      alert('Failed to create backup export');
+      alert('Failed to create backup export: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
@@ -766,6 +748,19 @@ export function ShipmentsTab() {
           </button>
         </div>
 
+        <div className="mb-4">
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by SSCC, title, or car registration..."
+              className="w-full px-4 py-2 pl-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          </div>
+        </div>
+
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
           <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-blue-800">
@@ -780,6 +775,7 @@ export function ShipmentsTab() {
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Title</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">SSCC/Packages</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Arrival</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Car Reg</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Operators</th>
@@ -790,8 +786,8 @@ export function ShipmentsTab() {
           <tbody className="divide-y divide-slate-200">
             {shipments.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                  No shipments found. Click "Sync with Sheet" to import data.
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  {searchQuery ? 'No shipments found matching your search' : 'No shipments found. Click "Sync with Sheet" to import data.'}
                 </td>
               </tr>
             ) : (
@@ -799,7 +795,7 @@ export function ShipmentsTab() {
                 <tr key={shipment.id} className={editingId === shipment.id ? 'bg-blue-50' : 'hover:bg-slate-50'}>
                   {editingId === shipment.id ? (
                     <>
-                      <td colSpan={6} className="px-4 py-3">
+                      <td colSpan={7} className="px-4 py-3">
                         <form onSubmit={(e) => updateShipment(shipment.id, e)} className="space-y-3">
                           <div className="grid grid-cols-4 gap-2">
                             <input
@@ -910,6 +906,9 @@ export function ShipmentsTab() {
                           <Package className="w-4 h-4 text-slate-400" />
                           <span className="text-sm font-medium text-slate-900">{shipment.title}</span>
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600 max-w-xs truncate" title={shipment.sscc_numbers}>
+                        {shipment.sscc_numbers || '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600">
                         {formatDate(shipment.start)}

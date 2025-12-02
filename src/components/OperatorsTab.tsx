@@ -1,15 +1,28 @@
 import { useState, useEffect } from 'react';
 import { supabase, Operator } from '../lib/supabase';
-import { Plus, Trash2, UserCheck, UserX } from 'lucide-react';
+import { Plus, Trash2, UserCheck, UserX, Search } from 'lucide-react';
 
 export function OperatorsTab() {
   const [operators, setOperators] = useState<Operator[]>([]);
+  const [filteredOperators, setFilteredOperators] = useState<Operator[]>([]);
   const [newOperatorName, setNewOperatorName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadOperators();
   }, []);
+
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredOperators(operators);
+    } else {
+      const query = searchQuery.toLowerCase();
+      setFilteredOperators(
+        operators.filter(op => op.name.toLowerCase().includes(query))
+      );
+    }
+  }, [searchQuery, operators]);
 
   const loadOperators = async () => {
     const { data } = await supabase
@@ -19,6 +32,7 @@ export function OperatorsTab() {
 
     if (data) {
       setOperators(data);
+      setFilteredOperators(data);
     }
     setLoading(false);
   };
@@ -64,22 +78,35 @@ export function OperatorsTab() {
     <div className="max-w-2xl">
       <h2 className="text-xl font-semibold text-slate-900 mb-6">Operators</h2>
 
-      <div className="mb-6 flex gap-2">
-        <input
-          type="text"
-          value={newOperatorName}
-          onChange={(e) => setNewOperatorName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && addOperator()}
-          placeholder="Operator name"
-          className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-        <button
-          onClick={addOperator}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Add
-        </button>
+      <div className="mb-6 space-y-4">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newOperatorName}
+            onChange={(e) => setNewOperatorName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addOperator()}
+            placeholder="Operator name"
+            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+          <button
+            onClick={addOperator}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add
+          </button>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search operators..."
+            className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -92,14 +119,14 @@ export function OperatorsTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {operators.length === 0 ? (
+            {filteredOperators.length === 0 ? (
               <tr>
                 <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
-                  No operators added yet
+                  {searchQuery ? 'No operators found' : 'No operators added yet'}
                 </td>
               </tr>
             ) : (
-              operators.map((operator) => (
+              filteredOperators.map((operator) => (
                 <tr key={operator.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 text-sm text-slate-900">{operator.name}</td>
                   <td className="px-4 py-3">

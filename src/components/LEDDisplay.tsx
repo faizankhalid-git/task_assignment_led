@@ -245,14 +245,14 @@ export function LEDDisplay() {
                           {shipment.assigned_operators.slice(0, 6).map((op, idx) => (
                             <span
                               key={idx}
-                              className="px-2 py-1 bg-slate-700 text-slate-100 rounded text-xs font-semibold text-center truncate"
+                              className="px-2 py-1 bg-green-600 text-white rounded text-xs font-semibold text-center truncate shadow-lg"
                               title={op}
                             >
                               {op}
                             </span>
                           ))}
                           {shipment.assigned_operators.length > 6 && (
-                            <span className="px-2 py-1 bg-slate-600 text-slate-300 rounded text-xs font-semibold text-center">
+                            <span className="px-2 py-1 bg-green-700 text-white rounded text-xs font-semibold text-center shadow-lg">
                               +{shipment.assigned_operators.length - 6}
                             </span>
                           )}
