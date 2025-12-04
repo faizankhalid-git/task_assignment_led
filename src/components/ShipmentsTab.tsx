@@ -38,6 +38,7 @@ export function ShipmentsTab() {
   const [loading, setLoading] = useState(true);
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showNewShipment, setShowNewShipment] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export function ShipmentsTab() {
 
   useEffect(() => {
     filterShipments();
-  }, [selectedDate, allShipments, searchQuery]);
+  }, [selectedDate, selectedStatus, allShipments, searchQuery]);
 
   const getDateRangeForFilter = (filter: string) => {
     const today = new Date();
@@ -112,6 +113,10 @@ export function ShipmentsTab() {
         const shipmentDate = new Date(s.start);
         return shipmentDate >= dateRange.start && shipmentDate < dateRange.end;
       });
+    }
+
+    if (selectedStatus !== 'all') {
+      filtered = filtered.filter(s => s.status === selectedStatus);
     }
 
     if (searchQuery.trim()) {
@@ -329,15 +334,10 @@ export function ShipmentsTab() {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
-    if (packagesList.length === 0) {
-      alert('Please add at least one package');
-      return;
-    }
-
     const newShipment = {
       row_id: Math.floor(Math.random() * 1000000),
       title: formData.get('title') as string,
-      sscc_numbers: packagesList.join(', '),
+      sscc_numbers: packagesList.length > 0 ? packagesList.join(', ') : '',
       start: formData.get('start') as string,
       car_reg_no: formData.get('car_reg_no') as string,
       status: 'pending',
@@ -748,7 +748,7 @@ export function ShipmentsTab() {
           </button>
         </div>
 
-        <div className="mb-4">
+        <div className="mb-4 space-y-3">
           <div className="relative">
             <input
               type="text"
@@ -758,6 +758,52 @@ export function ShipmentsTab() {
               className="w-full px-4 py-2 pl-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-2">Filter by Status</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedStatus('all')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                  selectedStatus === 'all'
+                    ? 'bg-slate-600 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setSelectedStatus('pending')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                  selectedStatus === 'pending'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                }`}
+              >
+                Pending
+              </button>
+              <button
+                onClick={() => setSelectedStatus('in_progress')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                  selectedStatus === 'in_progress'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                In Progress
+              </button>
+              <button
+                onClick={() => setSelectedStatus('completed')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                  selectedStatus === 'completed'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-green-50 text-green-700 hover:bg-green-100'
+                }`}
+              >
+                Completed
+              </button>
+            </div>
           </div>
         </div>
 
@@ -831,6 +877,13 @@ export function ShipmentsTab() {
 
                           <div>
                             <label className="block text-xs font-medium text-slate-700 mb-1">Assign Operators</label>
+                            <input
+                              type="text"
+                              placeholder="Search operators..."
+                              value={operatorSearch}
+                              onChange={(e) => setOperatorSearch(e.target.value)}
+                              className="w-full px-2 py-1 border border-slate-300 rounded text-xs mb-2 focus:ring-2 focus:ring-blue-500"
+                            />
                             <div className="bg-white border border-slate-300 rounded-lg p-2 max-h-40 overflow-y-auto">
                               {selectedOperators.length > 0 && (
                                 <div className="mb-2 pb-2 border-b border-slate-200">
@@ -850,7 +903,7 @@ export function ShipmentsTab() {
                                 </div>
                               )}
                               <div className="grid grid-cols-3 gap-1">
-                                {operators.map((op) => (
+                                {operators.filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase())).map((op) => (
                                   <label
                                     key={op.id}
                                     className={`flex items-center gap-1 p-1 rounded border cursor-pointer text-xs ${

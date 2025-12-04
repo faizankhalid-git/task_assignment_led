@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, Shipment, Operator, Package as PackageType } from '../lib/supabase';
-import { X, Loader2, Package } from 'lucide-react';
+import { X, Loader2, Package, Search } from 'lucide-react';
 
 type CompletionModalProps = {
   shipment: Shipment;
@@ -14,6 +14,7 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
   const [selectedOperators, setSelectedOperators] = useState<string[]>(shipment.assigned_operators || []);
   const [notes, setNotes] = useState(shipment.notes || '');
   const [operators, setOperators] = useState<Operator[]>([]);
+  const [operatorSearch, setOperatorSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [loadingPackages, setLoadingPackages] = useState(true);
@@ -68,10 +69,12 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
   };
 
   const handleComplete = async () => {
-    const missingLocations = packages.filter(pkg => !packageLocations[pkg.id]?.trim());
-    if (missingLocations.length > 0) {
-      setError(`Please specify storage location for all packages (${missingLocations.length} missing)`);
-      return;
+    if (packages.length > 0) {
+      const missingLocations = packages.filter(pkg => !packageLocations[pkg.id]?.trim());
+      if (missingLocations.length > 0) {
+        setError(`Please specify storage location for all packages (${missingLocations.length} missing)`);
+        return;
+      }
     }
 
     if (selectedOperators.length === 0) {
@@ -96,9 +99,9 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
         if (pkgError) throw pkgError;
       }
 
-      const allLocations = packages
-        .map(pkg => `${pkg.sscc_number}: ${packageLocations[pkg.id]}`)
-        .join('; ');
+      const allLocations = packages.length > 0
+        ? packages.map(pkg => `${pkg.sscc_number}: ${packageLocations[pkg.id]}`).join('; ')
+        : '';
 
       const { error: updateError } = await supabase
         .from('shipments')
@@ -173,25 +176,40 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Assigned Operators <span className="text-red-600">*</span>
             </label>
+            <div className="relative mb-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search operators..."
+                value={operatorSearch}
+                onChange={(e) => setOperatorSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              />
+            </div>
             <div className="border border-slate-300 rounded-lg p-3 max-h-48 overflow-y-auto">
               {operators.length === 0 ? (
                 <p className="text-sm text-slate-500">No active operators available</p>
               ) : (
                 <div className="space-y-2">
-                  {operators.map((operator) => (
-                    <label
-                      key={operator.id}
-                      className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-2 rounded"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedOperators.includes(operator.name)}
-                        onChange={() => toggleOperator(operator.name)}
-                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-slate-900">{operator.name}</span>
-                    </label>
-                  ))}
+                  {operators
+                    .filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase()))
+                    .map((operator) => (
+                      <label
+                        key={operator.id}
+                        className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-2 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedOperators.includes(operator.name)}
+                          onChange={() => toggleOperator(operator.name)}
+                          className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-slate-900">{operator.name}</span>
+                      </label>
+                    ))}
+                  {operators.filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase())).length === 0 && (
+                    <p className="text-sm text-slate-500 text-center py-2">No operators found</p>
+                  )}
                 </div>
               )}
             </div>
@@ -227,7 +245,7 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
           </button>
           <button
             onClick={handleComplete}
-            disabled={saving || loadingPackages || packages.length === 0}
+            disabled={saving || loadingPackages}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
