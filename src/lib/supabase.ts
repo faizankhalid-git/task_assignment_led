@@ -23,6 +23,7 @@ export type Shipment = {
   updated_at: string;
   archived: boolean;
   created_at: string;
+  is_delivery: boolean;
 };
 
 export type Operator = {

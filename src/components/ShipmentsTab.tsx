@@ -46,6 +46,7 @@ export function ShipmentsTab() {
   const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
   const [packagesList, setPackagesList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isDelivery, setIsDelivery] = useState(true);
 
   useEffect(() => {
     loadShipments();
@@ -344,7 +345,8 @@ export function ShipmentsTab() {
       archived: false,
       assigned_operators: selectedOperators,
       storage_location: '',
-      notes: ''
+      notes: '',
+      is_delivery: isDelivery
     };
 
     try {
@@ -372,6 +374,7 @@ export function ShipmentsTab() {
       setSelectedOperators([]);
       setOperatorSearch('');
       setPackagesList([]);
+      setIsDelivery(true);
       setShowNewShipment(false);
       loadShipments();
       alert('Delivery created successfully!');
@@ -596,6 +599,19 @@ export function ShipmentsTab() {
                 />
               </div>
 
+              <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="is_delivery"
+                  checked={isDelivery}
+                  onChange={(e) => setIsDelivery(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="is_delivery" className="text-sm font-medium text-slate-700 cursor-pointer">
+                  This is a delivery (show vehicle icon on LED display)
+                </label>
+              </div>
+
               <PackageManager
                 packages={packagesList}
                 onChange={setPackagesList}
@@ -813,6 +829,12 @@ export function ShipmentsTab() {
             <p className="font-medium mb-1">Automatic Syncing Enabled</p>
             <p>Google Sheets data is automatically synced every 2 minutes. New shipments will appear here automatically.</p>
           </div>
+        </div>
+      </div>
+
+      <div className="mb-4 flex items-center justify-between">
+        <div className="text-sm font-medium text-slate-700">
+          Total: <span className="text-lg font-bold text-blue-600">{shipments.length}</span> {shipments.length === 1 ? 'delivery' : 'deliveries'}
         </div>
       </div>
 
