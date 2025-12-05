@@ -3,7 +3,6 @@ import { supabase, Shipment } from '../lib/supabase';
 import { Package, Clock, Truck, Users, AlertCircle, RefreshCw } from 'lucide-react';
 
 const PAGE_SIZE = 4;
-const ROTATE_SECONDS = 3;
 const REFRESH_SECONDS = 5;
 
 export function LEDDisplay() {
@@ -11,25 +10,35 @@ export function LEDDisplay() {
   const [currentPage, setCurrentPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [rotateSeconds, setRotateSeconds] = useState(3);
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
+  const rotationIntervalRef = useRef<NodeJS.Timeout>();
   const previousShipmentCountRef = useRef<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const defaultSound = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZUQ0PUqzm77BdGQs9lt300YIxBSV+zPLYijgIFmS56umhUg4KR6Xh8K9gHQU2jNPy1YU4BhxtwO7lmVENEFCr5O+wXBkLPJbd8tN+MQUmfsvy2Io3CBZkuunooVIOCkek4PCwYRwFNo3T8tWFOAYbbc/u5ZlRDQ9Rq+TwsFwYCz2W3fLTfjEFJn/L8tiKNwgWZLrp6KFSDAZGpeDwsGEcBTaN0/LVhTgGG23P7uWZUQ0PUavk8LBcGAs9lt3y034xBSZ/y/LYijcIFmS66eiVUgwGRqXg8K9hHAU2jdPy1YU4BhttwO7lmVENDlGr5PCwXBgLPZbd8tN+MQUmf8vy2Io3CBdkuunooVILBkak4PCwYR0GNo3T8tWFOAYbbcDu5ZlRDQ5Rq+TwsFwYCz2X3fLTfjEFJn/L8tiKNwgXZLrp6KFSCwdGpODwsGEdBjaN0/LVhTgGG23A7uWZUQ0OUavk8LBcGAs9l93y034xBSZ/y/LYijcIF2S66eiVUgsHRqTg8LBhHQU1jdPy1YU4BhttMO7mmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunqoVILB0ak4PCwYR0FNY3T8tWFOAYbbTDu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6qFSCwdGpODwsGEdBTWN0/LVhTgGG20w7uWYUQ0OUazk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eqhUgsHRqTg8LBhHQU1jdPy1IY4Bhxtwe7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbcHu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG3B7uWYUQ0OUazk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4Bhxtwe7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbcHu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG3B7uWYUQ0OUavk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4BhxtM+7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbTPu5ZhRDQ5Rq+TvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG0z7uWYUQ0OUavk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4BhxtM+7lmFENDlGr5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbTPu5ZhRDQ5Rq+TvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG0z7uWYUQ0OUavk77BdGAs=';
 
-    const loadNotificationSound = async () => {
+    const loadSettings = async () => {
       const { data } = await supabase
         .from('app_settings')
-        .select('value')
-        .eq('key', 'notification_sound_url')
-        .maybeSingle();
+        .select('key, value')
+        .in('key', ['notification_sound_url', 'led_rotation_seconds']);
 
-      const soundUrl = data?.value || defaultSound;
-      audioRef.current = new Audio(soundUrl);
+      if (data) {
+        const settings = Object.fromEntries(data.map(s => [s.key, s.value]));
+
+        const soundUrl = settings.notification_sound_url || defaultSound;
+        audioRef.current = new Audio(soundUrl);
+
+        const seconds = parseInt(settings.led_rotation_seconds || '3', 10);
+        setRotateSeconds(seconds);
+      } else {
+        audioRef.current = new Audio(defaultSound);
+      }
     };
 
-    loadNotificationSound();
+    loadSettings();
     loadShipments();
     setupRealtimeSubscription();
 
@@ -40,6 +49,9 @@ export function LEDDisplay() {
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
+      }
+      if (rotationIntervalRef.current) {
+        clearInterval(rotationIntervalRef.current);
       }
     };
   }, []);
@@ -65,12 +77,20 @@ export function LEDDisplay() {
     const totalPages = Math.ceil(shipments.length / PAGE_SIZE);
     if (totalPages <= 1) return;
 
-    const interval = setInterval(() => {
-      setCurrentPage((prev) => (prev + 1) % totalPages);
-    }, ROTATE_SECONDS * 1000);
+    if (rotationIntervalRef.current) {
+      clearInterval(rotationIntervalRef.current);
+    }
 
-    return () => clearInterval(interval);
-  }, [shipments]);
+    rotationIntervalRef.current = setInterval(() => {
+      setCurrentPage((prev) => (prev + 1) % totalPages);
+    }, rotateSeconds * 1000);
+
+    return () => {
+      if (rotationIntervalRef.current) {
+        clearInterval(rotationIntervalRef.current);
+      }
+    };
+  }, [shipments, rotateSeconds]);
 
   const getTodayDateRange = () => {
     const today = new Date();
