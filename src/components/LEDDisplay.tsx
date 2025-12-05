@@ -41,6 +41,7 @@ export function LEDDisplay() {
     loadSettings();
     loadShipments();
     setupRealtimeSubscription();
+    setupSettingsSubscription();
 
     refreshIntervalRef.current = setInterval(() => {
       loadShipments();
@@ -65,6 +66,42 @@ export function LEDDisplay() {
         () => {
           loadShipments();
         }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
+
+  const setupSettingsSubscription = () => {
+    const defaultSound = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZUQ0PUqzm77BdGQs9lt300YIxBSV+zPLYijgIFmS56umhUg4KR6Xh8K9gHQU2jNPy1YU4BhxtwO7lmVENEFCr5O+wXBkLPJbd8tN+MQUmfsvy2Io3CBZkuunooVIOCkek4PCwYRwFNo3T8tWFOAYbbc/u5ZlRDQ9Rq+TwsFwYCz2W3fLTfjEFJn/L8tiKNwgWZLrp6KFSDAZGpeDwsGEcBTaN0/LVhTgGG23P7uWZUQ0PUavk8LBcGAs9lt3y034xBSZ/y/LYijcIFmS66eiVUgwGRqXg8K9hHAU2jdPy1YU4BhttwO7lmVENDlGr5PCwXBgLPZbd8tN+MQUmf8vy2Io3CBdkuunooVILBkak4PCwYR0GNo3T8tWFOAYbbcDu5ZlRDQ5Rq+TwsFwYCz2X3fLTfjEFJn/L8tiKNwgXZLrp6KFSCwdGpODwsGEdBjaN0/LVhTgGG23A7uWZUQ0OUavk8LBcGAs9l93y034xBSZ/y/LYijcIF2S66eiVUgsHRqTg8LBhHQU1jdPy1YU4BhttMO7mmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunqoVILB0ak4PCwYR0FNY3T8tWFOAYbbTDu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6qFSCwdGpODwsGEdBTWN0/LVhTgGG20w7uWYUQ0OUazk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eqhUgsHRqTg8LBhHQU1jdPy1IY4Bhxtwe7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbcHu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG3B7uWYUQ0OUazk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4Bhxtwe7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbcHu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG3B7uWYUQ0OUavk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4BhxtM+7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbTPu5ZhRDQ5Rq+TvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG0z7uWYUQ0OUavk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4BhxtM+7lmFENDlGr5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbTPu5ZhRDQ5Rq+TvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG0z7uWYUQ0OUavk77BdGAs=';
+
+    const handleSettingsChange = (payload: any) => {
+      const { key, value } = payload.new;
+
+      if (key === 'notification_sound_url') {
+        const soundUrl = value || defaultSound;
+        audioRef.current = new Audio(soundUrl);
+        console.log('Notification sound updated:', soundUrl.substring(0, 50) + '...');
+      } else if (key === 'led_rotation_seconds') {
+        const seconds = parseInt(value || '3', 10);
+        setRotateSeconds(seconds);
+        console.log('Rotation seconds updated to:', seconds);
+      }
+    };
+
+    const channel = supabase
+      .channel('settings-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'app_settings' },
+        handleSettingsChange
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'app_settings' },
+        handleSettingsChange
       )
       .subscribe();
 

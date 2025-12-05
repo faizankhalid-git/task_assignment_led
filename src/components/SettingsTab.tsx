@@ -121,14 +121,26 @@ export function SettingsTab() {
 
   const handleSaveSoundSettings = async () => {
     setSavingSoundSettings(true);
+    setSoundTestResult(null);
 
-    await supabase.from('app_settings').upsert([
-      { key: 'notification_sound_url', value: notificationSoundUrl },
-      { key: 'led_rotation_seconds', value: rotationSeconds }
-    ], { onConflict: 'key' });
+    try {
+      const { error } = await supabase.from('app_settings').upsert([
+        { key: 'notification_sound_url', value: notificationSoundUrl },
+        { key: 'led_rotation_seconds', value: rotationSeconds }
+      ], { onConflict: 'key' });
 
-    setSavingSoundSettings(false);
-    setSoundTestResult({ success: true, message: 'Settings saved successfully!' });
+      if (error) {
+        console.error('Save error:', error);
+        setSoundTestResult({ success: false, message: `Failed to save: ${error.message}` });
+      } else {
+        setSoundTestResult({ success: true, message: 'Settings saved successfully!' });
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+      setSoundTestResult({ success: false, message: 'Failed to save settings' });
+    } finally {
+      setSavingSoundSettings(false);
+    }
   };
 
   return (
