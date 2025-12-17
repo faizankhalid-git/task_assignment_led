@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import {names} from "module"
+
 import { supabase, Shipment, Operator, Package as PackageType } from '../lib/supabase';
 import { X, Loader2, Package, Search } from 'lucide-react';
 
-type_web CompletionModalProps = {
+type CompletionModalProps = {
   shipment: Shipment;
   onClose: () => void;
   onComplete: () => void;
