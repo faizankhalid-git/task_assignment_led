@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase, Shipment, Operator, Package as PackageType } from '../lib/supabase';
 import { X, Loader2, Package, Search } from 'lucide-react';
 
-type CompletionModalProps = {
+type_web CompletionModalProps = {
   shipment: Shipment;
   onClose: () => void;
   onComplete: () => void;
