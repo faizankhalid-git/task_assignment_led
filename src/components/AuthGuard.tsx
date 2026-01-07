@@ -11,7 +11,6 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -32,14 +31,8 @@ export function AuthGuard({ children }: AuthGuardProps) {
     setError('');
 
     try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        setError('Check your email for confirmation link');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
     }
@@ -100,15 +93,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
               type="submit"
               className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
             >
-              {isSignUp ? 'Sign Up' : 'Sign In'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="w-full text-sm text-blue-600 hover:text-blue-700"
-            >
-              {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+              Sign In
             </button>
           </form>
         </div>
