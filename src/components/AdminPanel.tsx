@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { ShipmentsTab } from './ShipmentsTab';
 import { OperatorsTab } from './OperatorsTab';
 import { SettingsTab } from './SettingsTab';
-import { UsersTab } from './UsersTab';
+import { UsersTab, type Permission } from './UsersTab';
 import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog } from 'lucide-react';
 
 type Tab = 'shipments' | 'operators' | 'settings' | 'users';
@@ -12,6 +12,7 @@ type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
   full_name: string;
   email: string;
+  permissions: Permission[];
 };
 
 export function AdminPanel() {
@@ -23,6 +24,21 @@ export function AdminPanel() {
     loadUserProfile();
   }, []);
 
+  useEffect(() => {
+    if (userProfile) {
+      if (tabs.length === 0) {
+        if (hasPermission('led_display')) {
+          window.location.href = '/led';
+        }
+      } else {
+        const currentTabAvailable = tabs.some(tab => tab.id === activeTab);
+        if (!currentTabAvailable) {
+          setActiveTab(tabs[0].id);
+        }
+      }
+    }
+  }, [userProfile, tabs.length]);
+
   const loadUserProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -30,7 +46,7 @@ export function AdminPanel() {
       if (user) {
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('role, full_name, email')
+          .select('role, full_name, email, permissions')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -50,15 +66,18 @@ export function AdminPanel() {
     await supabase.auth.signOut();
   };
 
-  const baseTabs = [
-    { id: 'shipments' as Tab, label: 'Shipments', icon: Package },
-    { id: 'operators' as Tab, label: 'Operators', icon: Users },
-    { id: 'settings' as Tab, label: 'Settings', icon: Settings },
+  const hasPermission = (permission: Permission) => {
+    return userProfile?.permissions?.includes(permission) || false;
+  };
+
+  const availableTabs = [
+    { id: 'shipments' as Tab, label: 'Shipments', icon: Package, permission: 'shipments' as Permission },
+    { id: 'operators' as Tab, label: 'Operators', icon: Users, permission: 'operators' as Permission },
+    { id: 'settings' as Tab, label: 'Settings', icon: Settings, permission: 'settings' as Permission },
+    { id: 'users' as Tab, label: 'Users', icon: UserCog, permission: 'users' as Permission },
   ];
 
-  const tabs = userProfile?.role === 'super_admin'
-    ? [...baseTabs, { id: 'users' as Tab, label: 'Users', icon: UserCog }]
-    : baseTabs;
+  const tabs = availableTabs.filter(tab => hasPermission(tab.permission));
 
   if (loading) {
     return (
@@ -99,15 +118,17 @@ export function AdminPanel() {
                   </div>
                 </div>
               )}
-              <a
-                href="/led"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2"
-              >
-                <Monitor className="w-4 h-4" />
-                Open LED Display
-              </a>
+              {hasPermission('led_display') && (
+                <a
+                  href="/led"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2"
+                >
+                  <Monitor className="w-4 h-4" />
+                  Open LED Display
+                </a>
+              )}
               <button
                 onClick={handleSignOut}
                 className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2"
@@ -121,36 +142,49 @@ export function AdminPanel() {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="bg-white rounded-lg shadow-sm border border-slate-200">
-          <div className="border-b border-slate-200">
-            <nav className="flex gap-1 p-2">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
-                      activeTab === tab.id
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </nav>
+        {tabs.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-12 text-center">
+            <div className="text-slate-400 mb-4">
+              <Shield className="w-16 h-16 mx-auto" />
+            </div>
+            <h2 className="text-xl font-semibold text-slate-900 mb-2">No Access</h2>
+            <p className="text-slate-600">You don't have permission to access any admin features.</p>
+            {hasPermission('led_display') && (
+              <p className="text-slate-500 mt-4">Redirecting to LED Display...</p>
+            )}
           </div>
+        ) : (
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200">
+            <div className="border-b border-slate-200">
+              <nav className="flex gap-1 p-2">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+                        activeTab === tab.id
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
 
-          <div className="p-6">
-            {activeTab === 'shipments' && <ShipmentsTab />}
-            {activeTab === 'operators' && <OperatorsTab />}
-            {activeTab === 'settings' && <SettingsTab />}
-            {activeTab === 'users' && userProfile?.role === 'super_admin' && <UsersTab />}
+            <div className="p-6">
+              {activeTab === 'shipments' && hasPermission('shipments') && <ShipmentsTab />}
+              {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
+              {activeTab === 'settings' && hasPermission('settings') && <SettingsTab />}
+              {activeTab === 'users' && hasPermission('users') && <UsersTab />}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
