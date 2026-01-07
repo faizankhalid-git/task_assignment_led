@@ -1,24 +1,72 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { ShipmentsTab } from './ShipmentsTab';
 import { OperatorsTab } from './OperatorsTab';
 import { SettingsTab } from './SettingsTab';
-import { Package, Users, Settings, LogOut, Monitor } from 'lucide-react';
+import { UsersTab } from './UsersTab';
+import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog } from 'lucide-react';
 
-type Tab = 'shipments' | 'operators' | 'settings';
+type Tab = 'shipments' | 'operators' | 'settings' | 'users';
+
+type UserProfile = {
+  role: 'super_admin' | 'admin' | 'operator';
+  full_name: string;
+  email: string;
+};
 
 export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<Tab>('shipments');
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadUserProfile();
+  }, []);
+
+  const loadUserProfile = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('role, full_name, email')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (data) {
+          setUserProfile(data);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading user profile:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
   };
 
-  const tabs = [
+  const baseTabs = [
     { id: 'shipments' as Tab, label: 'Shipments', icon: Package },
     { id: 'operators' as Tab, label: 'Operators', icon: Users },
     { id: 'settings' as Tab, label: 'Settings', icon: Settings },
   ];
+
+  const tabs = userProfile?.role === 'super_admin'
+    ? [...baseTabs, { id: 'users' as Tab, label: 'Users', icon: UserCog }]
+    : baseTabs;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -36,6 +84,21 @@ export function AdminPanel() {
             </div>
 
             <div className="flex items-center gap-3">
+              {userProfile && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+                  {userProfile.role === 'super_admin' && (
+                    <Shield className="w-4 h-4 text-purple-600" />
+                  )}
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-slate-900">
+                      {userProfile.full_name || userProfile.email}
+                    </div>
+                    <div className="text-xs text-slate-500 capitalize">
+                      {userProfile.role.replace('_', ' ')}
+                    </div>
+                  </div>
+                </div>
+              )}
               <a
                 href="/led"
                 target="_blank"
@@ -85,6 +148,7 @@ export function AdminPanel() {
             {activeTab === 'shipments' && <ShipmentsTab />}
             {activeTab === 'operators' && <OperatorsTab />}
             {activeTab === 'settings' && <SettingsTab />}
+            {activeTab === 'users' && userProfile?.role === 'super_admin' && <UsersTab />}
           </div>
         </div>
       </div>
