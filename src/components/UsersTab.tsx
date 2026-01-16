@@ -71,25 +71,32 @@ export function UsersTab() {
     setSuccess('');
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newUser.email,
-        password: newUser.password,
-      });
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
 
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: newUser.email,
+            password: newUser.password,
+            role: newUser.role,
+            full_name: newUser.full_name,
+            permissions: newUser.permissions,
+          }),
+        }
+      );
 
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .insert({
-          id: authData.user.id,
-          email: newUser.email,
-          role: newUser.role,
-          full_name: newUser.full_name,
-          permissions: newUser.permissions,
-        });
+      const result = await response.json();
 
-      if (profileError) throw profileError;
+      if (!response.ok || result.error) {
+        throw new Error(result.error || 'Failed to create user');
+      }
 
       setSuccess('User created successfully');
       setShowCreateModal(false);
@@ -169,9 +176,26 @@ export function UsersTab() {
     setSuccess('');
 
     try {
-      const { error } = await supabase.auth.admin.deleteUser(userId);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
 
-      if (error) throw error;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ userId }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        throw new Error(result.error || 'Failed to delete user');
+      }
 
       setSuccess('User deleted successfully');
       loadUsers();
