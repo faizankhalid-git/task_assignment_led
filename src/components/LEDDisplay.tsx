@@ -60,7 +60,7 @@ export function LEDDisplay() {
   }, []);
 
   const setupRealtimeSubscription = () => {
-    const channel = supabase
+    const shipmentsChannel = supabase
       .channel('shipments-led-changes')
       .on(
         'postgres_changes',
@@ -71,8 +71,20 @@ export function LEDDisplay() {
       )
       .subscribe();
 
+    const operatorsChannel = supabase
+      .channel('operators-led-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'operators' },
+        () => {
+          loadOperators();
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(shipmentsChannel);
+      supabase.removeChannel(operatorsChannel);
     };
   };
 
@@ -263,68 +275,68 @@ export function LEDDisplay() {
   };
 
   return (
-    <div className="h-screen bg-slate-900 text-white p-6 overflow-hidden flex flex-col">
-      <div className="max-w-7xl mx-auto flex-1 flex flex-col">
-        <div className="mb-6 flex items-center justify-between border-b border-slate-700 pb-4">
+    <div className="min-h-screen bg-slate-900 text-white p-3 sm:p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-4 md:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-700 pb-3 md:pb-4 gap-3">
           <div>
-            <h1 className="text-4xl font-bold mb-2">Shipment Display</h1>
-            <p className="text-slate-400 text-lg">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 md:mb-2">Shipment Display</h1>
+            <p className="text-slate-400 text-sm sm:text-base md:text-lg">
               Showing {visibleShipments.length} of {shipments.length} shipments
               {totalPages > 1 && ` (Page ${currentPage + 1}/${totalPages})`}
             </p>
           </div>
-          <div className="text-right">
-            <div className="flex items-center justify-end gap-2 mb-2">
-              <RefreshCw className="w-4 h-4 text-slate-400" />
-              <span className="text-sm text-slate-400">Last Updated</span>
+          <div className="text-left sm:text-right">
+            <div className="flex items-center justify-start sm:justify-end gap-2 mb-1 md:mb-2">
+              <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 text-slate-400" />
+              <span className="text-xs sm:text-sm text-slate-400">Last Updated</span>
             </div>
-            <div className="text-xl font-mono text-slate-300">
+            <div className="text-base sm:text-lg md:text-xl font-mono text-slate-300">
               {formatLastUpdated()}
             </div>
           </div>
         </div>
 
         {visibleShipments.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center justify-center py-16 md:py-32">
             <div className="text-center">
-              <Package className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400 text-xl">No shipments to display</p>
+              <Package className="w-12 h-12 md:w-16 md:h-16 text-slate-600 mx-auto mb-4" />
+              <p className="text-slate-400 text-base md:text-xl">No shipments to display</p>
             </div>
           </div>
         ) : (
-          <div className="flex-1 grid grid-cols-2 gap-4 content-start overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 pb-20 md:pb-8">
             {visibleShipments.map((shipment) => (
               <div
                 key={shipment.id}
-                className="bg-slate-800 rounded-lg p-5 border-l-8 transition-all flex flex-col"
+                className="bg-slate-800 rounded-lg p-3 sm:p-4 md:p-5 border-l-4 sm:border-l-8 transition-all flex flex-col"
                 style={{ borderLeftColor: getStatusColor(shipment.status).replace('bg-', '#') }}
               >
-                <div className="flex flex-col gap-3 flex-1">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <Package className="w-6 h-6 text-slate-400" />
-                      <h3 className="text-2xl font-bold text-white">{shipment.title}</h3>
+                <div className="flex flex-col gap-2 sm:gap-3 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <Package className="w-5 h-5 sm:w-6 sm:h-6 text-slate-400 flex-shrink-0" />
+                      <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white truncate">{shipment.title}</h3>
                     </div>
-                    <span className={`px-3 py-1 ${getStatusColor(shipment.status)} text-white rounded-lg font-bold text-xs`}>
+                    <span className={`px-2 sm:px-3 py-1 ${getStatusColor(shipment.status)} text-white rounded-lg font-bold text-xs whitespace-nowrap flex-shrink-0`}>
                       {getStatusText(shipment.status)}
                     </span>
                   </div>
 
                   {shipment.sscc_numbers && (
-                    <p className="text-slate-300 text-sm font-medium line-clamp-1">
+                    <p className="text-slate-300 text-xs sm:text-sm font-medium line-clamp-1">
                       {shipment.sscc_numbers}
                     </p>
                   )}
 
-                  <div className="flex flex-col gap-3 py-1">
+                  <div className="flex flex-col gap-2 sm:gap-3 py-1">
                     <div className="flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                      <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 flex-shrink-0" />
                       <div>
                         <div className="text-xs text-slate-400 font-medium">Arrival Time</div>
-                        <div className="text-lg font-bold text-white">{formatDate(shipment.start)}</div>
+                        <div className="text-sm sm:text-base md:text-lg font-bold text-white">{formatDate(shipment.start)}</div>
                         {shipment.is_delivery && isArrivingSoon(shipment.start) && (
                           <div className="flex items-center gap-1 mt-0.5 text-amber-300">
-                            <AlertCircle className="w-4 h-4" />
+                            <AlertCircle className="w-3 h-3 sm:w-4 sm:h-4" />
                             <span className="font-bold text-xs">Arriving Soon</span>
                           </div>
                         )}
@@ -333,10 +345,10 @@ export function LEDDisplay() {
 
                     {shipment.is_delivery && (
                       <div className="flex items-center gap-2">
-                        <Truck className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                        <Truck className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 flex-shrink-0" />
                         <div>
                           <div className="text-xs text-slate-400 font-medium">Vehicle</div>
-                          <div className="text-lg font-bold text-white">{shipment.car_reg_no || 'N/A'}</div>
+                          <div className="text-sm sm:text-base md:text-lg font-bold text-white">{shipment.car_reg_no || 'N/A'}</div>
                         </div>
                       </div>
                     )}
@@ -344,21 +356,19 @@ export function LEDDisplay() {
 
                   {shipment.assigned_operators.length > 0 && (
                     <div className="flex items-start gap-2 pt-3 border-t border-slate-700">
-                      <Users className="w-6 h-6 text-slate-400 flex-shrink-0 mt-1" />
+                      <Users className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <div className="text-sm text-slate-400 font-medium mb-2">Assigned Operators</div>
-                        <div className="grid gap-2" style={{
-                          gridTemplateColumns: `repeat(${Math.min(shipment.assigned_operators.length, 4)}, minmax(0, 1fr))`
-                        }}>
+                        <div className="text-xs text-slate-400 font-medium mb-1.5">Assigned Operators</div>
+                        <div className="flex flex-wrap gap-1.5">
                           {shipment.assigned_operators.map((op, idx) => (
-                            <div
+                            <span
                               key={idx}
-                              className="px-3 py-2.5 text-white rounded-lg text-sm font-bold text-center shadow-lg"
+                              className="px-2 py-1 text-white rounded text-xs font-semibold text-center truncate shadow-lg"
                               style={{ backgroundColor: getOperatorColor(op) }}
                               title={op}
                             >
                               {op}
-                            </div>
+                            </span>
                           ))}
                         </div>
                       </div>
@@ -371,12 +381,12 @@ export function LEDDisplay() {
         )}
 
         {totalPages > 1 && (
-          <div className="mt-8 flex justify-center gap-2">
+          <div className="mt-6 md:mt-8 flex justify-center gap-2 pb-4">
             {Array.from({ length: totalPages }, (_, i) => (
               <div
                 key={i}
-                className={`w-3 h-3 rounded-full transition-all ${
-                  i === currentPage ? 'bg-blue-500 w-8' : 'bg-slate-600'
+                className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full transition-all ${
+                  i === currentPage ? 'bg-blue-500 w-6 sm:w-8' : 'bg-slate-600'
                 }`}
               />
             ))}

@@ -10,6 +10,9 @@ export function OperatorsTab() {
   const [editingOperator, setEditingOperator] = useState<Operator | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [selectedOperators, setSelectedOperators] = useState<Set<string>>(new Set());
+  const [bulkColor, setBulkColor] = useState('#10b981');
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
 
   useEffect(() => {
     loadOperators();
@@ -63,6 +66,36 @@ export function OperatorsTab() {
     loadOperators();
   };
 
+  const toggleSelectOperator = (id: string) => {
+    const newSelected = new Set(selectedOperators);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedOperators(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOperators.size === filteredOperators.length) {
+      setSelectedOperators(new Set());
+    } else {
+      setSelectedOperators(new Set(filteredOperators.map(op => op.id)));
+    }
+  };
+
+  const updateBulkColors = async () => {
+    const promises = Array.from(selectedOperators).map(id =>
+      supabase.from('operators').update({ color: bulkColor }).eq('id', id)
+    );
+
+    await Promise.all(promises);
+    setSelectedOperators(new Set());
+    setShowBulkEdit(false);
+    setBulkColor('#10b981');
+    loadOperators();
+  };
+
   const toggleActive = async (id: string, currentActive: boolean) => {
     await supabase
       .from('operators')
@@ -88,7 +121,7 @@ export function OperatorsTab() {
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-4xl">
       <h2 className="text-xl font-semibold text-slate-900 mb-6">Operators</h2>
 
       <div className="mb-6 space-y-4">
@@ -130,12 +163,74 @@ export function OperatorsTab() {
             className="w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
+
+        {selectedOperators.size > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-blue-900">
+                  {selectedOperators.size} operator{selectedOperators.size !== 1 ? 's' : ''} selected
+                </span>
+                <button
+                  onClick={() => setShowBulkEdit(!showBulkEdit)}
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 text-sm"
+                >
+                  <Palette className="w-4 h-4" />
+                  Change Colors
+                </button>
+                <button
+                  onClick={() => setSelectedOperators(new Set())}
+                  className="px-3 py-1.5 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 text-sm"
+                >
+                  Clear Selection
+                </button>
+              </div>
+            </div>
+
+            {showBulkEdit && (
+              <div className="mt-4 pt-4 border-t border-blue-200">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Select color for all selected operators
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={bulkColor}
+                    onChange={(e) => setBulkColor(e.target.value)}
+                    className="h-12 w-24 rounded-lg border border-slate-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={bulkColor}
+                    onChange={(e) => setBulkColor(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm"
+                    placeholder="#10b981"
+                  />
+                  <button
+                    onClick={updateBulkColors}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium"
+                  >
+                    Apply to {selectedOperators.size} operator{selectedOperators.size !== 1 ? 's' : ''}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
+              <th className="px-4 py-3 w-12">
+                <input
+                  type="checkbox"
+                  checked={filteredOperators.length > 0 && selectedOperators.size === filteredOperators.length}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                />
+              </th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Name</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Color</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Status</th>
@@ -145,13 +240,21 @@ export function OperatorsTab() {
           <tbody className="divide-y divide-slate-200">
             {filteredOperators.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
                   {searchQuery ? 'No operators found' : 'No operators added yet'}
                 </td>
               </tr>
             ) : (
               filteredOperators.map((operator) => (
                 <tr key={operator.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedOperators.has(operator.id)}
+                      onChange={() => toggleSelectOperator(operator.id)}
+                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                  </td>
                   <td className="px-4 py-3 text-sm text-slate-900">{operator.name}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
