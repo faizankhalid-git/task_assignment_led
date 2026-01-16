@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase, Shipment, Operator } from '../lib/supabase';
-import { Package, Clock, Truck, Users, AlertCircle, RefreshCw } from 'lucide-react';
+import { supabase, Shipment, Operator, Announcement } from '../lib/supabase';
+import { Package, Clock, Truck, Users, AlertCircle, RefreshCw, Bell, X } from 'lucide-react';
 
 const PAGE_SIZE = 4;
 const REFRESH_SECONDS = 5;
@@ -8,6 +8,7 @@ const REFRESH_SECONDS = 5;
 export function LEDDisplay() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -42,11 +43,13 @@ export function LEDDisplay() {
     loadSettings();
     loadShipments();
     loadOperators();
+    loadAnnouncements();
     setupRealtimeSubscription();
     setupSettingsSubscription();
 
     refreshIntervalRef.current = setInterval(() => {
       loadShipments();
+      loadAnnouncements();
     }, REFRESH_SECONDS * 1000);
 
     return () => {
@@ -82,9 +85,21 @@ export function LEDDisplay() {
       )
       .subscribe();
 
+    const announcementsChannel = supabase
+      .channel('announcements-led-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'announcements' },
+        () => {
+          loadAnnouncements();
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(shipmentsChannel);
       supabase.removeChannel(operatorsChannel);
+      supabase.removeChannel(announcementsChannel);
     };
   };
 
@@ -167,6 +182,27 @@ export function LEDDisplay() {
       }
     } catch (err) {
       console.error('Failed to load operators:', err);
+    }
+  };
+
+  const loadAnnouncements = async () => {
+    try {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('is_active', true)
+        .lte('start_time', now)
+        .or(`end_time.is.null,end_time.gt.${now}`)
+        .order('priority', { ascending: false })
+        .order('start_time', { ascending: false });
+
+      if (error) throw error;
+      if (data) {
+        setAnnouncements(data);
+      }
+    } catch (err) {
+      console.error('Failed to load announcements:', err);
     }
   };
 
@@ -295,6 +331,57 @@ export function LEDDisplay() {
             </div>
           </div>
         </div>
+
+        {announcements.length > 0 && (
+          <div className="mb-4 md:mb-6 space-y-3">
+            {announcements.map((announcement) => {
+              const priorityColors = {
+                urgent: { bg: '#dc2626', text: '#ffffff', border: '#991b1b' },
+                high: { bg: '#ea580c', text: '#ffffff', border: '#c2410c' },
+                medium: { bg: '#2563eb', text: '#ffffff', border: '#1e40af' },
+                low: { bg: '#475569', text: '#ffffff', border: '#334155' },
+              };
+
+              const colors = priorityColors[announcement.priority];
+              const bgColor = announcement.background_color || colors.bg;
+              const textColor = announcement.text_color || colors.text;
+
+              return (
+                <div
+                  key={announcement.id}
+                  className="rounded-lg shadow-lg border-2 overflow-hidden animate-pulse"
+                  style={{
+                    backgroundColor: bgColor,
+                    borderColor: colors.border,
+                    animation: announcement.priority === 'urgent' ? 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
+                  }}
+                >
+                  <div className="p-4 md:p-6">
+                    <div className="flex items-start gap-3 md:gap-4">
+                      <Bell className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0 mt-1" style={{ color: textColor }} />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h2 className="text-xl md:text-2xl lg:text-3xl font-bold" style={{ color: textColor }}>
+                            {announcement.title}
+                          </h2>
+                          <span
+                            className="px-2 py-1 rounded text-xs font-bold uppercase"
+                            style={{ backgroundColor: colors.border, color: '#ffffff' }}
+                          >
+                            {announcement.priority}
+                          </span>
+                        </div>
+                        <p className="text-base md:text-lg lg:text-xl" style={{ color: textColor }}>
+                          {announcement.message}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {visibleShipments.length === 0 ? (
           <div className="flex items-center justify-center py-16 md:py-32">

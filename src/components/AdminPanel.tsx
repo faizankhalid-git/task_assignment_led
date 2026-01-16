@@ -4,9 +4,10 @@ import { ShipmentsTab } from './ShipmentsTab';
 import { OperatorsTab } from './OperatorsTab';
 import { SettingsTab } from './SettingsTab';
 import { UsersTab, type Permission } from './UsersTab';
-import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog } from 'lucide-react';
+import { AnnouncementsTab } from './AnnouncementsTab';
+import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell } from 'lucide-react';
 
-type Tab = 'shipments' | 'operators' | 'settings' | 'users';
+type Tab = 'shipments' | 'operators' | 'announcements' | 'settings' | 'users';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -58,6 +59,7 @@ export function AdminPanel() {
   const availableTabs = [
     { id: 'shipments' as Tab, label: 'Shipments', icon: Package, permission: 'shipments' as Permission },
     { id: 'operators' as Tab, label: 'Operators', icon: Users, permission: 'operators' as Permission },
+    { id: 'announcements' as Tab, label: 'Announcements', icon: Bell, permission: 'announcements' as Permission },
     { id: 'settings' as Tab, label: 'Settings', icon: Settings, permission: 'settings' as Permission },
     { id: 'users' as Tab, label: 'Users', icon: UserCog, permission: 'users' as Permission },
   ];
@@ -180,6 +182,7 @@ export function AdminPanel() {
             <div className="p-6">
               {activeTab === 'shipments' && hasPermission('shipments') && <ShipmentsTab />}
               {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
+              {activeTab === 'announcements' && hasPermission('announcements') && <AnnouncementsTab />}
               {activeTab === 'settings' && hasPermission('settings') && <SettingsTab />}
               {activeTab === 'users' && hasPermission('users') && <UsersTab />}
             </div>

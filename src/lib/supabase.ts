@@ -51,3 +51,19 @@ export type Package = {
   created_at: string;
   updated_at: string;
 };
+
+export type Announcement = {
+  id: string;
+  title: string;
+  message: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  display_duration: number;
+  start_time: string;
+  end_time: string | null;
+  is_active: boolean;
+  background_color: string;
+  text_color: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
