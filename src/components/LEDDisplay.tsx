@@ -174,10 +174,12 @@ export function LEDDisplay() {
       const { data, error } = await supabase
         .from('operators')
         .select('*')
+        .eq('active', true)
         .order('name');
 
       if (error) throw error;
       if (data) {
+        console.log('Loaded operators:', data);
         setOperators(data);
       }
     } catch (err) {
@@ -281,8 +283,18 @@ export function LEDDisplay() {
   };
 
   const getOperatorColor = (operatorName: string): string => {
-    const operator = operators.find(op => op.name === operatorName);
-    return operator?.color || '#10b981';
+    const trimmedName = operatorName.trim();
+    const operator = operators.find(op =>
+      op.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    if (operator) {
+      console.log(`Color for ${operatorName}: ${operator.color}`);
+      return operator.color || '#10b981';
+    }
+
+    console.warn(`Operator not found: "${operatorName}". Available operators:`, operators.map(op => op.name));
+    return '#10b981';
   };
 
   if (loading) {

@@ -42,24 +42,50 @@ export function AnnouncementsTab() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const announcementData = {
-      ...formData,
-      end_time: formData.end_time || null,
-    };
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
 
-    if (editingId) {
-      await supabase
-        .from('announcements')
-        .update(announcementData)
-        .eq('id', editingId);
-    } else {
-      await supabase
-        .from('announcements')
-        .insert([announcementData]);
+      if (!user) {
+        console.error('No authenticated user found');
+        alert('You must be logged in to create announcements');
+        return;
+      }
+
+      const announcementData = {
+        ...formData,
+        end_time: formData.end_time || null,
+        created_by: user.id,
+      };
+
+      if (editingId) {
+        const { error } = await supabase
+          .from('announcements')
+          .update(announcementData)
+          .eq('id', editingId);
+
+        if (error) {
+          console.error('Error updating announcement:', error);
+          alert('Failed to update announcement: ' + error.message);
+          return;
+        }
+      } else {
+        const { error } = await supabase
+          .from('announcements')
+          .insert([announcementData]);
+
+        if (error) {
+          console.error('Error creating announcement:', error);
+          alert('Failed to create announcement: ' + error.message);
+          return;
+        }
+      }
+
+      resetForm();
+      loadAnnouncements();
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      alert('An error occurred. Please try again.');
     }
-
-    resetForm();
-    loadAnnouncements();
   };
 
   const resetForm = () => {
