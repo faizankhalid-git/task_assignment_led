@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase, Shipment } from '../lib/supabase';
+import { supabase, Shipment, Operator } from '../lib/supabase';
 import { Package, Clock, Truck, Users, AlertCircle, RefreshCw } from 'lucide-react';
 
 const PAGE_SIZE = 4;
@@ -7,6 +7,7 @@ const REFRESH_SECONDS = 5;
 
 export function LEDDisplay() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [operators, setOperators] = useState<Operator[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -40,6 +41,7 @@ export function LEDDisplay() {
 
     loadSettings();
     loadShipments();
+    loadOperators();
     setupRealtimeSubscription();
     setupSettingsSubscription();
 
@@ -140,6 +142,22 @@ export function LEDDisplay() {
     };
   };
 
+  const loadOperators = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('operators')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      if (data) {
+        setOperators(data);
+      }
+    } catch (err) {
+      console.error('Failed to load operators:', err);
+    }
+  };
+
   const loadShipments = async () => {
     try {
       const dateRange = getTodayDateRange();
@@ -212,6 +230,11 @@ export function LEDDisplay() {
       case 'completed': return 'COMPLETED';
       default: return status.toUpperCase();
     }
+  };
+
+  const getOperatorColor = (operatorName: string): string => {
+    const operator = operators.find(op => op.name === operatorName);
+    return operator?.color || '#10b981';
   };
 
   if (loading) {
@@ -321,24 +344,22 @@ export function LEDDisplay() {
 
                   {shipment.assigned_operators.length > 0 && (
                     <div className="flex items-start gap-2 pt-3 border-t border-slate-700">
-                      <Users className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
+                      <Users className="w-6 h-6 text-slate-400 flex-shrink-0 mt-1" />
                       <div className="flex-1">
-                        <div className="text-xs text-slate-400 font-medium mb-1.5">Assigned Operators</div>
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {shipment.assigned_operators.slice(0, 6).map((op, idx) => (
-                            <span
+                        <div className="text-sm text-slate-400 font-medium mb-2">Assigned Operators</div>
+                        <div className="grid gap-2" style={{
+                          gridTemplateColumns: `repeat(${Math.min(shipment.assigned_operators.length, 4)}, minmax(0, 1fr))`
+                        }}>
+                          {shipment.assigned_operators.map((op, idx) => (
+                            <div
                               key={idx}
-                              className="px-2 py-1 bg-green-600 text-white rounded text-xs font-semibold text-center truncate shadow-lg"
+                              className="px-3 py-2.5 text-white rounded-lg text-sm font-bold text-center shadow-lg"
+                              style={{ backgroundColor: getOperatorColor(op) }}
                               title={op}
                             >
                               {op}
-                            </span>
+                            </div>
                           ))}
-                          {shipment.assigned_operators.length > 6 && (
-                            <span className="px-2 py-1 bg-green-700 text-white rounded text-xs font-semibold text-center shadow-lg">
-                              +{shipment.assigned_operators.length - 6}
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase, Operator } from '../lib/supabase';
-import { Plus, Trash2, UserCheck, UserX, Search } from 'lucide-react';
+import { Plus, Trash2, UserCheck, UserX, Search, Palette, Edit2, X } from 'lucide-react';
 
 export function OperatorsTab() {
   const [operators, setOperators] = useState<Operator[]>([]);
   const [filteredOperators, setFilteredOperators] = useState<Operator[]>([]);
   const [newOperatorName, setNewOperatorName] = useState('');
+  const [newOperatorColor, setNewOperatorColor] = useState('#10b981');
+  const [editingOperator, setEditingOperator] = useState<Operator | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -42,12 +44,23 @@ export function OperatorsTab() {
 
     const { error } = await supabase
       .from('operators')
-      .insert({ name: newOperatorName.trim() });
+      .insert({ name: newOperatorName.trim(), color: newOperatorColor });
 
     if (!error) {
       setNewOperatorName('');
+      setNewOperatorColor('#10b981');
       loadOperators();
     }
+  };
+
+  const updateOperatorColor = async (id: string, color: string) => {
+    await supabase
+      .from('operators')
+      .update({ color })
+      .eq('id', id);
+
+    setEditingOperator(null);
+    loadOperators();
   };
 
   const toggleActive = async (id: string, currentActive: boolean) => {
@@ -88,6 +101,16 @@ export function OperatorsTab() {
             placeholder="Operator name"
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
+          <div className="relative">
+            <input
+              type="color"
+              value={newOperatorColor}
+              onChange={(e) => setNewOperatorColor(e.target.value)}
+              className="h-full w-16 rounded-lg border border-slate-300 cursor-pointer"
+              title="Choose operator color"
+            />
+            <Palette className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 text-white pointer-events-none" />
+          </div>
           <button
             onClick={addOperator}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
@@ -114,6 +137,7 @@ export function OperatorsTab() {
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Name</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Color</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Status</th>
               <th className="px-4 py-3 text-right text-sm font-medium text-slate-700">Actions</th>
             </tr>
@@ -121,7 +145,7 @@ export function OperatorsTab() {
           <tbody className="divide-y divide-slate-200">
             {filteredOperators.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
                   {searchQuery ? 'No operators found' : 'No operators added yet'}
                 </td>
               </tr>
@@ -129,6 +153,15 @@ export function OperatorsTab() {
               filteredOperators.map((operator) => (
                 <tr key={operator.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3 text-sm text-slate-900">{operator.name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-8 h-8 rounded border border-slate-300"
+                        style={{ backgroundColor: operator.color }}
+                      />
+                      <span className="text-xs text-slate-500 font-mono">{operator.color}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                       operator.active
@@ -151,6 +184,13 @@ export function OperatorsTab() {
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
                       <button
+                        onClick={() => setEditingOperator(operator)}
+                        className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                        title="Edit color"
+                      >
+                        <Palette className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => toggleActive(operator.id, operator.active)}
                         className="px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded"
                       >
@@ -170,6 +210,79 @@ export function OperatorsTab() {
           </tbody>
         </table>
       </div>
+
+      {editingOperator && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Edit Operator Color</h3>
+              <button
+                onClick={() => setEditingOperator(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Operator: {editingOperator.name}
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Choose Color
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={editingOperator.color}
+                    onChange={(e) => setEditingOperator({ ...editingOperator, color: e.target.value })}
+                    className="h-12 w-24 rounded-lg border border-slate-300 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={editingOperator.color}
+                      onChange={(e) => setEditingOperator({ ...editingOperator, color: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm"
+                      placeholder="#10b981"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-4 bg-slate-100 rounded-lg">
+                <div
+                  className="w-16 h-16 rounded-lg border-2 border-white shadow-lg"
+                  style={{ backgroundColor: editingOperator.color }}
+                />
+                <div>
+                  <div className="text-sm font-medium text-slate-700">Preview</div>
+                  <div className="text-xs text-slate-500">This is how it will appear on LED display</div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => updateOperatorColor(editingOperator.id, editingOperator.color)}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Save Color
+                </button>
+                <button
+                  onClick={() => setEditingOperator(null)}
+                  className="flex-1 px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

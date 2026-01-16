@@ -30,6 +30,7 @@ export type Operator = {
   id: string;
   name: string;
   active: boolean;
+  color: string;
   created_at: string;
 };
 
