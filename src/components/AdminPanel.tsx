@@ -24,21 +24,6 @@ export function AdminPanel() {
     loadUserProfile();
   }, []);
 
-  useEffect(() => {
-    if (userProfile) {
-      if (tabs.length === 0) {
-        if (hasPermission('led_display')) {
-          window.location.href = '/led';
-        }
-      } else {
-        const currentTabAvailable = tabs.some(tab => tab.id === activeTab);
-        if (!currentTabAvailable) {
-          setActiveTab(tabs[0].id);
-        }
-      }
-    }
-  }, [userProfile, tabs.length]);
-
   const loadUserProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -78,6 +63,21 @@ export function AdminPanel() {
   ];
 
   const tabs = availableTabs.filter(tab => hasPermission(tab.permission));
+
+  useEffect(() => {
+    if (userProfile) {
+      if (tabs.length === 0) {
+        if (hasPermission('led_display')) {
+          window.location.href = '/led';
+        }
+      } else {
+        const currentTabAvailable = tabs.some(tab => tab.id === activeTab);
+        if (!currentTabAvailable) {
+          setActiveTab(tabs[0].id);
+        }
+      }
+    }
+  }, [userProfile, tabs.length]);
 
   if (loading) {
     return (
