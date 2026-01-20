@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, Announcement } from '../lib/supabase';
 import { Plus, Trash2, Bell, Clock, Calendar, AlertCircle, Edit2, X, Palette } from 'lucide-react';
+import { notificationService } from '../services/notificationService';
 
 export function AnnouncementsTab() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -20,8 +21,13 @@ export function AnnouncementsTab() {
   });
 
   useEffect(() => {
+    initializeNotifications();
     loadAnnouncements();
   }, []);
+
+  const initializeNotifications = async () => {
+    await notificationService.initialize();
+  };
 
   const loadAnnouncements = async () => {
     setLoading(true);
@@ -78,6 +84,13 @@ export function AnnouncementsTab() {
           alert('Failed to create announcement: ' + error.message);
           return;
         }
+
+        const announcementType =
+          formData.priority === 'urgent' ? 'emergency' :
+          formData.priority === 'high' ? 'priority' :
+          'general';
+
+        await notificationService.notifyAnnouncement(announcementType);
       }
 
       resetForm();

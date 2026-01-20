@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, Operator } from '../lib/supabase';
 import { Plus, Trash2, UserCheck, UserX, Search, Palette, Edit2, X } from 'lucide-react';
+import { notificationService } from '../services/notificationService';
 
 export function OperatorsTab() {
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -15,8 +16,13 @@ export function OperatorsTab() {
   const [showBulkEdit, setShowBulkEdit] = useState(false);
 
   useEffect(() => {
+    initializeNotifications();
     loadOperators();
   }, []);
+
+  const initializeNotifications = async () => {
+    await notificationService.initialize();
+  };
 
   useEffect(() => {
     if (searchQuery.trim() === '') {
@@ -45,11 +51,16 @@ export function OperatorsTab() {
   const addOperator = async () => {
     if (!newOperatorName.trim()) return;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('operators')
-      .insert({ name: newOperatorName.trim(), color: newOperatorColor });
+      .insert({ name: newOperatorName.trim(), color: newOperatorColor })
+      .select()
+      .single();
 
-    if (!error) {
+    if (!error && data) {
+      const { data: { user } } = await supabase.auth.getUser();
+      await notificationService.notifyOperatorCreated(data.id, data.name);
+
       setNewOperatorName('');
       setNewOperatorColor('#10b981');
       loadOperators();
@@ -97,10 +108,21 @@ export function OperatorsTab() {
   };
 
   const toggleActive = async (id: string, currentActive: boolean) => {
+    const operator = operators.find(op => op.id === id);
+    if (!operator) return;
+
     await supabase
       .from('operators')
       .update({ active: !currentActive })
       .eq('id', id);
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!currentActive) {
+      await notificationService.notifyOperatorAssigned(id, operator.name, user?.id);
+    } else {
+      await notificationService.notifyOperatorRemoved(id, operator.name, user?.id);
+    }
 
     loadOperators();
   };

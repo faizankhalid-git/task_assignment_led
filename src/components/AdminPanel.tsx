@@ -5,9 +5,10 @@ import { OperatorsTab } from './OperatorsTab';
 import { SettingsTab } from './SettingsTab';
 import { UsersTab, type Permission } from './UsersTab';
 import { AnnouncementsTab } from './AnnouncementsTab';
-import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell } from 'lucide-react';
+import { NotificationsTab } from './NotificationsTab';
+import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell, Volume2 } from 'lucide-react';
 
-type Tab = 'shipments' | 'operators' | 'announcements' | 'settings' | 'users';
+type Tab = 'shipments' | 'operators' | 'announcements' | 'notifications' | 'settings' | 'users';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -60,6 +61,7 @@ export function AdminPanel() {
     { id: 'shipments' as Tab, label: 'Shipments', icon: Package, permission: 'shipments' as Permission },
     { id: 'operators' as Tab, label: 'Operators', icon: Users, permission: 'operators' as Permission },
     { id: 'announcements' as Tab, label: 'Announcements', icon: Bell, permission: 'announcements' as Permission },
+    { id: 'notifications' as Tab, label: 'Notifications', icon: Volume2, permission: 'notifications' as Permission },
     { id: 'settings' as Tab, label: 'Settings', icon: Settings, permission: 'settings' as Permission },
     { id: 'users' as Tab, label: 'Users', icon: UserCog, permission: 'users' as Permission },
   ];
@@ -183,6 +185,7 @@ export function AdminPanel() {
               {activeTab === 'shipments' && hasPermission('shipments') && <ShipmentsTab />}
               {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
               {activeTab === 'announcements' && hasPermission('announcements') && <AnnouncementsTab />}
+              {activeTab === 'notifications' && hasPermission('notifications') && <NotificationsTab />}
               {activeTab === 'settings' && hasPermission('settings') && <SettingsTab />}
               {activeTab === 'users' && hasPermission('users') && <UsersTab />}
             </div>

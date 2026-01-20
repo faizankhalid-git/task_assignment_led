@@ -5,16 +5,27 @@ import { Package, Clock, Truck, Users, AlertCircle, RefreshCw, Bell, X } from 'l
 const PAGE_SIZE = 4;
 const REFRESH_SECONDS = 5;
 
+interface WelcomeMessage {
+  id: string;
+  operator_id: string;
+  message_template: string;
+  display_duration: number;
+  displayed: boolean;
+  created_at: string;
+}
+
 export function LEDDisplay() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [welcomeMessage, setWelcomeMessage] = useState<WelcomeMessage | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [rotateSeconds, setRotateSeconds] = useState(3);
   const refreshIntervalRef = useRef<NodeJS.Timeout>();
   const rotationIntervalRef = useRef<NodeJS.Timeout>();
+  const welcomeTimeoutRef = useRef<NodeJS.Timeout>();
   const previousShipmentCountRef = useRef<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -44,12 +55,14 @@ export function LEDDisplay() {
     loadShipments();
     loadOperators();
     loadAnnouncements();
+    loadWelcomeMessages();
     setupRealtimeSubscription();
     setupSettingsSubscription();
 
     refreshIntervalRef.current = setInterval(() => {
       loadShipments();
       loadAnnouncements();
+      loadWelcomeMessages();
     }, REFRESH_SECONDS * 1000);
 
     return () => {
@@ -58,6 +71,9 @@ export function LEDDisplay() {
       }
       if (rotationIntervalRef.current) {
         clearInterval(rotationIntervalRef.current);
+      }
+      if (welcomeTimeoutRef.current) {
+        clearTimeout(welcomeTimeoutRef.current);
       }
     };
   }, []);
@@ -96,10 +112,22 @@ export function LEDDisplay() {
       )
       .subscribe();
 
+    const welcomeChannel = supabase
+      .channel('welcome-messages-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'led_welcome_messages' },
+        () => {
+          loadWelcomeMessages();
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(shipmentsChannel);
       supabase.removeChannel(operatorsChannel);
       supabase.removeChannel(announcementsChannel);
+      supabase.removeChannel(welcomeChannel);
     };
   };
 
@@ -205,6 +233,41 @@ export function LEDDisplay() {
       }
     } catch (err) {
       console.error('Failed to load announcements:', err);
+    }
+  };
+
+  const loadWelcomeMessages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('led_welcome_messages')
+        .select('*')
+        .eq('displayed', false)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data && (!welcomeMessage || welcomeMessage.id !== data.id)) {
+        setWelcomeMessage(data);
+
+        if (welcomeTimeoutRef.current) {
+          clearTimeout(welcomeTimeoutRef.current);
+        }
+
+        welcomeTimeoutRef.current = setTimeout(async () => {
+          await supabase
+            .from('led_welcome_messages')
+            .update({ displayed: true, displayed_at: new Date().toISOString() })
+            .eq('id', data.id);
+
+          setWelcomeMessage(null);
+        }, data.display_duration * 1000);
+      } else if (!data && welcomeMessage) {
+        setWelcomeMessage(null);
+      }
+    } catch (err) {
+      console.error('Failed to load welcome messages:', err);
     }
   };
 
@@ -351,6 +414,31 @@ export function LEDDisplay() {
             </div>
           </div>
         </div>
+
+        {welcomeMessage && (
+          <div className="mb-4 md:mb-6">
+            <div
+              className="rounded-lg shadow-2xl border-4 overflow-hidden animate-bounce"
+              style={{
+                backgroundColor: '#10b981',
+                borderColor: '#059669',
+                animation: 'bounce 1s ease-in-out 3',
+              }}
+            >
+              <div className="p-6 md:p-8">
+                <div className="text-center">
+                  <div className="text-6xl md:text-8xl mb-4">👋</div>
+                  <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold text-white mb-4">
+                    {welcomeMessage.message_template}
+                  </h2>
+                  <p className="text-lg md:text-2xl text-green-50 opacity-90">
+                    We're excited to have you on the team!
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {announcements.length > 0 && (
           <div className="mb-4 md:mb-6 space-y-3">
