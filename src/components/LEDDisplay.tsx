@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, Shipment, Operator, Announcement } from '../lib/supabase';
-import { Package, Clock, Truck, Users, AlertCircle, RefreshCw, Bell, X } from 'lucide-react';
+import { Package, Clock, Truck, Users, AlertCircle, RefreshCw, Bell, X, Radio } from 'lucide-react';
+import { liveAudioService } from '../services/liveAudioService';
 
 const PAGE_SIZE = 4;
 const REFRESH_SECONDS = 5;
@@ -14,11 +15,19 @@ interface WelcomeMessage {
   created_at: string;
 }
 
+interface AudioSession {
+  id: string;
+  broadcaster_name: string;
+  is_active: boolean;
+  started_at: string;
+}
+
 export function LEDDisplay() {
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [welcomeMessage, setWelcomeMessage] = useState<WelcomeMessage | null>(null);
+  const [liveAudioSession, setLiveAudioSession] = useState<AudioSession | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -28,6 +37,7 @@ export function LEDDisplay() {
   const welcomeTimeoutRef = useRef<NodeJS.Timeout>();
   const previousShipmentCountRef = useRef<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const defaultSound = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZUQ0PUqzm77BdGQs9lt300YIxBSV+zPLYijgIFmS56umhUg4KR6Xh8K9gHQU2jNPy1YU4BhxtwO7lmVENEFCr5O+wXBkLPJbd8tN+MQUmfsvy2Io3CBZkuunooVIOCkek4PCwYRwFNo3T8tWFOAYbbc/u5ZlRDQ9Rq+TwsFwYCz2W3fLTfjEFJn/L8tiKNwgWZLrp6KFSDAZGpeDwsGEcBTaN0/LVhTgGG23P7uWZUQ0PUavk8LBcGAs9lt3y034xBSZ/y/LYijcIFmS66eiVUgwGRqXg8K9hHAU2jdPy1YU4BhttwO7lmVENDlGr5PCwXBgLPZbd8tN+MQUmf8vy2Io3CBdkuunooVILBkak4PCwYR0GNo3T8tWFOAYbbcDu5ZlRDQ5Rq+TwsFwYCz2X3fLTfjEFJn/L8tiKNwgXZLrp6KFSCwdGpODwsGEdBjaN0/LVhTgGG23A7uWZUQ0OUavk8LBcGAs9l93y034xBSZ/y/LYijcIF2S66eiVUgsHRqTg8LBhHQU1jdPy1YU4BhttMO7mmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunqoVILB0ak4PCwYR0FNY3T8tWFOAYbbTDu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6qFSCwdGpODwsGEdBTWN0/LVhTgGG20w7uWYUQ0OUazk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eqhUgsHRqTg8LBhHQU1jdPy1IY4Bhxtwe7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbcHu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG3B7uWYUQ0OUazk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4Bhxtwe7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbcHu5ZhRDQ5RrOTvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG3B7uWYUQ0OUavk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4BhxtM+7lmFENDlGs5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbTPu5ZhRDQ5Rq+TvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG0z7uWYUQ0OUavk77BdGQs9l93y034xBSZ/y/LXijcIF2S66eihUgsHRqTg8LBhHQU1jdPy1IY4BhxtM+7lmFENDlGr5O+wXRkLPZfd8tN+MQUmf8vy14o3CBdkuunooVILB0ak4PCwYR0FNY3T8tSGOAYcbTPu5ZhRDQ5Rq+TvsF0ZCz2X3fLTfjEFJn/L8teKNwgXZLrp6KFSCwdGpODwsGEdBTWN0/LUhjgGHG0z7uWYUQ0OUavk77BdGAs=';
@@ -56,8 +66,10 @@ export function LEDDisplay() {
     loadOperators();
     loadAnnouncements();
     loadWelcomeMessages();
+    checkForActiveAudioSession();
     setupRealtimeSubscription();
     setupSettingsSubscription();
+    setupAudioSessionListener();
 
     refreshIntervalRef.current = setInterval(() => {
       loadShipments();
@@ -75,8 +87,35 @@ export function LEDDisplay() {
       if (welcomeTimeoutRef.current) {
         clearTimeout(welcomeTimeoutRef.current);
       }
+      if (audioCleanupRef.current) {
+        audioCleanupRef.current();
+      }
+      liveAudioService.stopPlayback();
     };
   }, []);
+
+  const checkForActiveAudioSession = async () => {
+    const session = await liveAudioService.getActiveSession();
+    if (session) {
+      setLiveAudioSession(session);
+      await liveAudioService.startPlayback(session.id);
+    }
+  };
+
+  const setupAudioSessionListener = () => {
+    const cleanup = liveAudioService.setupRealtimeListener(
+      (session) => {
+        setLiveAudioSession(session);
+        liveAudioService.startPlayback(session.id);
+      },
+      () => {
+        setLiveAudioSession(null);
+        liveAudioService.stopPlayback();
+      }
+    );
+
+    audioCleanupRef.current = cleanup;
+  };
 
   const setupRealtimeSubscription = () => {
     const shipmentsChannel = supabase
@@ -414,6 +453,39 @@ export function LEDDisplay() {
             </div>
           </div>
         </div>
+
+        {liveAudioSession && (
+          <div className="mb-4 md:mb-6">
+            <div
+              className="rounded-lg shadow-2xl border-4 overflow-hidden"
+              style={{
+                backgroundColor: '#dc2626',
+                borderColor: '#991b1b',
+              }}
+            >
+              <div className="p-6 md:p-10">
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-4 mb-4">
+                    <div className="relative">
+                      <Radio className="w-16 h-16 md:w-20 md:h-20 text-white" />
+                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-white rounded-full animate-ping"></div>
+                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-white rounded-full"></div>
+                    </div>
+                  </div>
+                  <h2 className="text-3xl md:text-5xl lg:text-7xl font-bold text-white mb-4 animate-pulse">
+                    LIVE ANNOUNCEMENT
+                  </h2>
+                  <p className="text-xl md:text-3xl text-red-100 font-semibold mb-2">
+                    {liveAudioSession.broadcaster_name}
+                  </p>
+                  <p className="text-lg md:text-2xl text-red-100 opacity-90">
+                    Please listen carefully
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {welcomeMessage && (
           <div className="mb-4 md:mb-6">

@@ -3,6 +3,7 @@ import { supabase, Shipment } from '../lib/supabase';
 import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X, Search } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
+import { notificationService } from '../services/notificationService';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const WEEK_NUMBERS = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
@@ -49,10 +50,15 @@ export function ShipmentsTab() {
   const [isDelivery, setIsDelivery] = useState(true);
 
   useEffect(() => {
+    initializeNotifications();
     loadShipments();
     loadOperators();
     setupRealtimeSubscription();
   }, []);
+
+  const initializeNotifications = async () => {
+    await notificationService.initialize();
+  };
 
   useEffect(() => {
     filterShipments();
@@ -371,6 +377,19 @@ export function ShipmentsTab() {
 
       if (packagesError) throw packagesError;
 
+      const { data: { user } } = await supabase.auth.getUser();
+
+      for (const operatorId of selectedOperators) {
+        const operator = operators.find(op => op.id === operatorId);
+        if (operator) {
+          await notificationService.notifyOperatorAssigned(
+            operatorId,
+            operator.name,
+            user?.id
+          );
+        }
+      }
+
       form.reset();
       setSelectedOperators([]);
       setOperatorSearch('');
@@ -399,12 +418,42 @@ export function ShipmentsTab() {
     };
 
     try {
+      const currentShipment = allShipments.find(s => s.id === id);
+      const previousOperators = currentShipment?.assigned_operators || [];
+
       const { error } = await supabase
         .from('shipments')
         .update(updates)
         .eq('id', id);
 
       if (error) throw error;
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const addedOperators = selectedOperators.filter(op => !previousOperators.includes(op));
+      const removedOperators = previousOperators.filter(op => !selectedOperators.includes(op));
+
+      for (const operatorId of addedOperators) {
+        const operator = operators.find(op => op.id === operatorId);
+        if (operator) {
+          await notificationService.notifyOperatorAssigned(
+            operatorId,
+            operator.name,
+            user?.id
+          );
+        }
+      }
+
+      for (const operatorId of removedOperators) {
+        const operator = operators.find(op => op.id === operatorId);
+        if (operator) {
+          await notificationService.notifyOperatorRemoved(
+            operatorId,
+            operator.name,
+            user?.id
+          );
+        }
+      }
 
       setEditingId(null);
       setSelectedOperators([]);

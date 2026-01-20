@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { UserPlus, Trash2, Edit2, X, Shield, User as UserIcon, Key } from 'lucide-react';
 
-export type Permission = 'led_display' | 'shipments' | 'operators' | 'settings' | 'announcements' | 'users' | 'notifications';
+export type Permission = 'led_display' | 'shipments' | 'operators' | 'settings' | 'announcements' | 'users' | 'notifications' | 'live_audio';
 
 type UserProfile = {
   id: string;
@@ -26,6 +26,7 @@ const AVAILABLE_PERMISSIONS: { id: Permission; label: string; description: strin
   { id: 'shipments', label: 'Shipments', description: 'View and manage shipments' },
   { id: 'operators', label: 'Operators', description: 'View and manage operators' },
   { id: 'announcements', label: 'Announcements', description: 'Create and manage announcements' },
+  { id: 'live_audio', label: 'Live Audio', description: 'Broadcast live audio announcements' },
   { id: 'notifications', label: 'Notifications', description: 'Configure notification sounds and alerts' },
   { id: 'settings', label: 'Settings', description: 'View and manage settings' },
   { id: 'users', label: 'Users', description: 'Manage users (super admin only)' },

@@ -22,12 +22,20 @@ export function NotificationsTab() {
 
   const handleToggleEnabled = async (settingKey: string, enabled: boolean) => {
     setSaving(settingKey);
+
+    const updatedSettings = settings.map(s =>
+      s.setting_key === settingKey
+        ? { ...s, setting_value: { ...s.setting_value, enabled } }
+        : s
+    );
+    setSettings(updatedSettings);
+
     try {
       await notificationService.updateSetting(settingKey, { enabled });
-      setSettings(notificationService.getAllSettings());
       showMessage('success', 'Setting updated successfully');
     } catch (error) {
       showMessage('error', 'Failed to update setting');
+      await loadSettings();
     }
     setSaving(null);
   };
@@ -54,12 +62,20 @@ export function NotificationsTab() {
 
   const handleSoundTypeChange = async (settingKey: string, soundType: SoundType) => {
     setSaving(settingKey);
+
+    const updatedSettings = settings.map(s =>
+      s.setting_key === settingKey
+        ? { ...s, setting_value: { ...s.setting_value, soundType } }
+        : s
+    );
+    setSettings(updatedSettings);
+
     try {
       await notificationService.updateSetting(settingKey, { soundType });
-      setSettings(notificationService.getAllSettings());
       showMessage('success', 'Sound type updated successfully');
     } catch (error) {
       showMessage('error', 'Failed to update sound type');
+      await loadSettings();
     }
     setSaving(null);
   };
