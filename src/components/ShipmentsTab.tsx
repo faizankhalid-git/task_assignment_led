@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
 import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X, Search } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
@@ -36,6 +36,7 @@ export function ShipmentsTab() {
   const [allShipments, setAllShipments] = useState<Shipment[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [operators, setOperators] = useState<Array<{ id: string; name: string }>>([]);
+  const [operatorAssignments, setOperatorAssignments] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('all');
@@ -46,8 +47,10 @@ export function ShipmentsTab() {
   const [operatorSearch, setOperatorSearch] = useState('');
   const [selectedOperators, setSelectedOperators] = useState<string[]>([]);
   const [packagesList, setPackagesList] = useState<string[]>([]);
+  const [editingPackagesList, setEditingPackagesList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDelivery, setIsDelivery] = useState(true);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     initializeNotifications();
@@ -61,8 +64,25 @@ export function ShipmentsTab() {
   };
 
   useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      filterShipments();
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  useEffect(() => {
     filterShipments();
-  }, [selectedDate, selectedStatus, allShipments, searchQuery]);
+    loadOperatorAssignments();
+  }, [selectedDate, selectedStatus, allShipments]);
 
   const getDateRangeForFilter = (filter: string) => {
     const today = new Date();
@@ -128,11 +148,16 @@ export function ShipmentsTab() {
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(s =>
-        s.sscc_numbers?.toLowerCase().includes(query) ||
-        s.title?.toLowerCase().includes(query) ||
-        s.car_reg_no?.toLowerCase().includes(query)
-      );
+      filtered = filtered.filter(s => {
+        const matchesTitle = s.title?.toLowerCase().includes(query);
+        const matchesSSCC = s.sscc_numbers?.toLowerCase().includes(query);
+        const matchesCarReg = s.car_reg_no?.toLowerCase().includes(query);
+        const matchesOperators = s.assigned_operators?.some(op =>
+          op.toLowerCase().includes(query)
+        );
+
+        return matchesTitle || matchesSSCC || matchesCarReg || matchesOperators;
+      });
     }
 
     setShipments(filtered);
@@ -161,6 +186,38 @@ export function ShipmentsTab() {
 
     if (data) {
       setOperators(data);
+    }
+  };
+
+  const loadOperatorAssignments = () => {
+    const assignments: Record<string, string[]> = {};
+
+    allShipments
+      .filter(s => s.status !== 'completed' && s.assigned_operators && s.assigned_operators.length > 0)
+      .forEach(shipment => {
+        shipment.assigned_operators.forEach(operatorName => {
+          if (!assignments[operatorName]) {
+            assignments[operatorName] = [];
+          }
+          assignments[operatorName].push(shipment.title);
+        });
+      });
+
+    setOperatorAssignments(assignments);
+  };
+
+  const loadPackagesForShipment = async (shipmentId: string) => {
+    const { data } = await supabase
+      .from('packages')
+      .select('sscc_number')
+      .eq('shipment_id', shipmentId)
+      .order('sscc_number');
+
+    if (data && data.length > 0) {
+      const packageNumbers = data.map(pkg => pkg.sscc_number);
+      setEditingPackagesList(packageNumbers);
+    } else {
+      setEditingPackagesList([]);
     }
   };
 
@@ -410,7 +467,7 @@ export function ShipmentsTab() {
 
     const updates = {
       title: formData.get('title') as string,
-      sscc_numbers: formData.get('sscc_numbers') as string,
+      sscc_numbers: editingPackagesList.length > 0 ? editingPackagesList.join(', ') : '',
       start: formData.get('start') as string,
       car_reg_no: formData.get('car_reg_no') as string,
       assigned_operators: selectedOperators,
@@ -421,12 +478,31 @@ export function ShipmentsTab() {
       const currentShipment = allShipments.find(s => s.id === id);
       const previousOperators = currentShipment?.assigned_operators || [];
 
-      const { error } = await supabase
+      const { error: shipmentError } = await supabase
         .from('shipments')
         .update(updates)
         .eq('id', id);
 
-      if (error) throw error;
+      if (shipmentError) throw shipmentError;
+
+      await supabase
+        .from('packages')
+        .delete()
+        .eq('shipment_id', id);
+
+      if (editingPackagesList.length > 0) {
+        const packagesData = editingPackagesList.map(sscc => ({
+          shipment_id: id,
+          sscc_number: sscc,
+          status: 'pending'
+        }));
+
+        const { error: packagesError } = await supabase
+          .from('packages')
+          .insert(packagesData);
+
+        if (packagesError) throw packagesError;
+      }
 
       const { data: { user } } = await supabase.auth.getUser();
 
@@ -457,6 +533,7 @@ export function ShipmentsTab() {
 
       setEditingId(null);
       setSelectedOperators([]);
+      setEditingPackagesList([]);
       loadShipments();
       alert('Delivery updated successfully!');
     } catch (err) {
@@ -698,30 +775,43 @@ export function ShipmentsTab() {
                   <div className="grid grid-cols-2 gap-2">
                     {operators
                       .filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase()))
-                      .map((op) => (
-                        <label
-                          key={op.id}
-                          className={`flex items-center gap-2 p-2 rounded border-2 cursor-pointer transition-all ${
-                            selectedOperators.includes(op.name)
-                              ? 'bg-blue-50 border-blue-500'
-                              : 'bg-white border-slate-200 hover:border-blue-300'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedOperators.includes(op.name)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedOperators([...selectedOperators, op.name]);
-                              } else {
-                                setSelectedOperators(selectedOperators.filter(n => n !== op.name));
-                              }
-                            }}
-                            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                          />
-                          <span className="text-sm text-slate-700 font-medium">{op.name}</span>
-                        </label>
-                      ))}
+                      .map((op) => {
+                        const hasAssignments = operatorAssignments[op.name] && operatorAssignments[op.name].length > 0;
+                        const assignmentTooltip = hasAssignments
+                          ? `Currently assigned to: ${operatorAssignments[op.name].join(', ')}`
+                          : '';
+
+                        return (
+                          <label
+                            key={op.id}
+                            className={`flex items-center gap-2 p-2 rounded border-2 cursor-pointer transition-all ${
+                              selectedOperators.includes(op.name)
+                                ? 'bg-blue-50 border-blue-500'
+                                : 'bg-white border-slate-200 hover:border-blue-300'
+                            }`}
+                            title={assignmentTooltip}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedOperators.includes(op.name)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedOperators([...selectedOperators, op.name]);
+                                } else {
+                                  setSelectedOperators(selectedOperators.filter(n => n !== op.name));
+                                }
+                              }}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                            />
+                            <span
+                              className="text-sm font-medium"
+                              style={{ color: hasAssignments ? '#17a34a' : undefined }}
+                            >
+                              {op.name}
+                            </span>
+                          </label>
+                        );
+                      })}
                   </div>
                   {operators.filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase())).length === 0 && (
                     <div className="text-center text-slate-500 text-sm py-4">No operators found</div>
@@ -820,10 +910,19 @@ export function ShipmentsTab() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by SSCC, title, or car registration..."
-              className="w-full px-4 py-2 pl-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Search by title, SSCC/packages, car registration, or operators..."
+              className="w-full px-4 py-2 pl-10 pr-10 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                title="Clear search"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
 
           <div>
@@ -915,20 +1014,13 @@ export function ShipmentsTab() {
                     <>
                       <td colSpan={7} className="px-4 py-3">
                         <form onSubmit={(e) => updateShipment(shipment.id, e)} className="space-y-3">
-                          <div className="grid grid-cols-4 gap-2">
+                          <div className="grid grid-cols-3 gap-2">
                             <input
                               type="text"
                               name="title"
                               defaultValue={shipment.title}
                               placeholder="Title"
                               required
-                              className="px-2 py-1 border border-slate-300 rounded text-sm"
-                            />
-                            <input
-                              type="text"
-                              name="sscc_numbers"
-                              defaultValue={shipment.sscc_numbers}
-                              placeholder="SSCC"
                               className="px-2 py-1 border border-slate-300 rounded text-sm"
                             />
                             <input
@@ -942,8 +1034,16 @@ export function ShipmentsTab() {
                               type="text"
                               name="car_reg_no"
                               defaultValue={shipment.car_reg_no}
-                              placeholder="Reg"
+                              placeholder="Car Registration"
                               className="px-2 py-1 border border-slate-300 rounded text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">Packages (SSCC Numbers)</label>
+                            <PackageManager
+                              packages={editingPackagesList}
+                              onPackagesChange={setEditingPackagesList}
                             />
                           </div>
 
@@ -975,30 +1075,43 @@ export function ShipmentsTab() {
                                 </div>
                               )}
                               <div className="grid grid-cols-3 gap-1">
-                                {operators.filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase())).map((op) => (
-                                  <label
-                                    key={op.id}
-                                    className={`flex items-center gap-1 p-1 rounded border cursor-pointer text-xs ${
-                                      selectedOperators.includes(op.name)
-                                        ? 'bg-blue-50 border-blue-500'
-                                        : 'bg-white border-slate-200 hover:border-blue-300'
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedOperators.includes(op.name)}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          setSelectedOperators([...selectedOperators, op.name]);
-                                        } else {
-                                          setSelectedOperators(selectedOperators.filter(n => n !== op.name));
-                                        }
-                                      }}
-                                      className="w-3 h-3 text-blue-600 rounded"
-                                    />
-                                    <span className="text-slate-700 font-medium">{op.name}</span>
-                                  </label>
-                                ))}
+                                {operators.filter(op => op.name.toLowerCase().includes(operatorSearch.toLowerCase())).map((op) => {
+                                  const hasAssignments = operatorAssignments[op.name] && operatorAssignments[op.name].length > 0;
+                                  const assignmentTooltip = hasAssignments
+                                    ? `Currently assigned to: ${operatorAssignments[op.name].join(', ')}`
+                                    : '';
+
+                                  return (
+                                    <label
+                                      key={op.id}
+                                      className={`flex items-center gap-1 p-1 rounded border cursor-pointer text-xs ${
+                                        selectedOperators.includes(op.name)
+                                          ? 'bg-blue-50 border-blue-500'
+                                          : 'bg-white border-slate-200 hover:border-blue-300'
+                                      }`}
+                                      title={assignmentTooltip}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedOperators.includes(op.name)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedOperators([...selectedOperators, op.name]);
+                                          } else {
+                                            setSelectedOperators(selectedOperators.filter(n => n !== op.name));
+                                          }
+                                        }}
+                                        className="w-3 h-3 text-blue-600 rounded"
+                                      />
+                                      <span
+                                        className="font-medium"
+                                        style={{ color: hasAssignments ? '#17a34a' : undefined }}
+                                      >
+                                        {op.name}
+                                      </span>
+                                    </label>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -1015,6 +1128,7 @@ export function ShipmentsTab() {
                               onClick={() => {
                                 setEditingId(null);
                                 setSelectedOperators([]);
+                                setEditingPackagesList([]);
                               }}
                               className="px-3 py-1 text-sm bg-slate-300 text-slate-700 rounded hover:bg-slate-400"
                             >
@@ -1083,9 +1197,10 @@ export function ShipmentsTab() {
                             </button>
                           )}
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               setEditingId(shipment.id);
                               setSelectedOperators(shipment.assigned_operators || []);
+                              await loadPackagesForShipment(shipment.id);
                             }}
                             className="px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded"
                             title="Edit delivery"

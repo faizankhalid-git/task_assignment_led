@@ -207,6 +207,15 @@ export function LEDDisplay() {
   };
 
   useEffect(() => {
+    const isMobile = window.innerWidth < 1024;
+
+    if (isMobile) {
+      if (rotationIntervalRef.current) {
+        clearInterval(rotationIntervalRef.current);
+      }
+      return;
+    }
+
     const totalPages = Math.ceil(shipments.length / PAGE_SIZE);
     if (totalPages <= 1) return;
 
@@ -415,8 +424,9 @@ export function LEDDisplay() {
     );
   }
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
   const startIdx = currentPage * PAGE_SIZE;
-  const visibleShipments = shipments.slice(startIdx, startIdx + PAGE_SIZE);
+  const visibleShipments = isMobile ? shipments : shipments.slice(startIdx, startIdx + PAGE_SIZE);
   const totalPages = Math.ceil(shipments.length / PAGE_SIZE);
 
   const formatLastUpdated = () => {
@@ -439,8 +449,14 @@ export function LEDDisplay() {
           <div>
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 md:mb-2">Shipment Display</h1>
             <p className="text-slate-400 text-sm sm:text-base md:text-lg">
-              Showing {visibleShipments.length} of {shipments.length} shipments
-              {totalPages > 1 && ` (Page ${currentPage + 1}/${totalPages})`}
+              {isMobile ? (
+                `${shipments.length} ${shipments.length === 1 ? 'shipment' : 'shipments'}`
+              ) : (
+                <>
+                  Showing {visibleShipments.length} of {shipments.length} shipments
+                  {totalPages > 1 && ` (Page ${currentPage + 1}/${totalPages})`}
+                </>
+              )}
             </p>
           </div>
           <div className="text-left sm:text-right">
@@ -647,7 +663,7 @@ export function LEDDisplay() {
           </div>
         )}
 
-        {totalPages > 1 && (
+        {!isMobile && totalPages > 1 && (
           <div className="mt-6 md:mt-8 flex justify-center gap-2 pb-4">
             {Array.from({ length: totalPages }, (_, i) => (
               <div
