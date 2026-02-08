@@ -24,6 +24,13 @@ export type Shipment = {
   archived: boolean;
   created_at: string;
   is_delivery: boolean;
+  created_by?: string;
+  updated_by?: string;
+  completed_by?: string;
+  completed_at?: string;
+  created_by_email?: string;
+  updated_by_email?: string;
+  completed_by_email?: string;
 };
 
 export type Operator = {

@@ -165,7 +165,7 @@ export function ShipmentsTab() {
 
   const loadShipments = async () => {
     const { data } = await supabase
-      .from('shipments')
+      .from('shipments_with_users')
       .select('*')
       .eq('archived', false)
       .order('start', { ascending: true });
@@ -192,8 +192,25 @@ export function ShipmentsTab() {
   const loadOperatorAssignments = () => {
     const assignments: Record<string, string[]> = {};
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
     allShipments
-      .filter(s => s.status !== 'completed' && s.assigned_operators && s.assigned_operators.length > 0)
+      .filter(s => {
+        if (!s.start || !s.assigned_operators || s.assigned_operators.length === 0) {
+          return false;
+        }
+
+        const shipmentDate = new Date(s.start);
+        shipmentDate.setHours(0, 0, 0, 0);
+
+        const isToday = shipmentDate.getTime() === today.getTime();
+        const isNotCompleted = s.status !== 'completed';
+
+        return isToday && isNotCompleted;
+      })
       .forEach(shipment => {
         shipment.assigned_operators.forEach(operatorName => {
           if (!assignments[operatorName]) {
@@ -269,6 +286,24 @@ export function ShipmentsTab() {
       minute: '2-digit',
       timeZone: 'UTC'
     });
+  };
+
+  const getActivityTooltip = (shipment: Shipment): string => {
+    const parts: string[] = [];
+
+    if (shipment.created_by_email) {
+      parts.push(`Created by: ${shipment.created_by_email}\n   ${formatDate(shipment.created_at)}`);
+    }
+
+    if (shipment.updated_by_email && shipment.updated_by !== shipment.created_by) {
+      parts.push(`Last edited by: ${shipment.updated_by_email}\n   ${formatDate(shipment.updated_at)}`);
+    }
+
+    if (shipment.completed_by_email) {
+      parts.push(`Completed by: ${shipment.completed_by_email}\n   ${formatDate(shipment.completed_at || shipment.updated_at)}`);
+    }
+
+    return parts.length > 0 ? parts.join('\n\n') : 'No activity tracking data';
   };
 
   const getStatusColor = (status: string) => {
@@ -399,6 +434,8 @@ export function ShipmentsTab() {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
+    const { data: { user } } = await supabase.auth.getUser();
+
     const newShipment = {
       row_id: Math.floor(Math.random() * 1000000),
       title: formData.get('title') as string,
@@ -410,7 +447,8 @@ export function ShipmentsTab() {
       assigned_operators: selectedOperators,
       storage_location: '',
       notes: '',
-      is_delivery: isDelivery
+      is_delivery: isDelivery,
+      created_by: user?.id
     };
 
     try {
@@ -433,8 +471,6 @@ export function ShipmentsTab() {
         .insert(packagesData);
 
       if (packagesError) throw packagesError;
-
-      const { data: { user } } = await supabase.auth.getUser();
 
       for (const operatorId of selectedOperators) {
         const operator = operators.find(op => op.id === operatorId);
@@ -465,13 +501,16 @@ export function ShipmentsTab() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
+    const { data: { user } } = await supabase.auth.getUser();
+
     const updates = {
       title: formData.get('title') as string,
       sscc_numbers: editingPackagesList.length > 0 ? editingPackagesList.join(', ') : '',
       start: formData.get('start') as string,
       car_reg_no: formData.get('car_reg_no') as string,
       assigned_operators: selectedOperators,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id
     };
 
     try {
@@ -508,6 +547,13 @@ export function ShipmentsTab() {
 
       const addedOperators = selectedOperators.filter(op => !previousOperators.includes(op));
       const removedOperators = previousOperators.filter(op => !selectedOperators.includes(op));
+      const reassignedOperators = selectedOperators.filter(op => previousOperators.includes(op));
+
+      const shipmentChanged =
+        currentShipment?.title !== updates.title ||
+        currentShipment?.start !== updates.start ||
+        currentShipment?.car_reg_no !== updates.car_reg_no ||
+        editingPackagesList.length !== (currentShipment?.sscc_numbers?.split(', ').filter(s => s).length || 0);
 
       for (const operatorId of addedOperators) {
         const operator = operators.find(op => op.id === operatorId);
@@ -517,6 +563,24 @@ export function ShipmentsTab() {
             operator.name,
             user?.id
           );
+        }
+      }
+
+      if (shipmentChanged) {
+        for (const operatorId of reassignedOperators) {
+          const operator = operators.find(op => op.id === operatorId);
+          if (operator) {
+            await notificationService.notifyOperatorReassigned(
+              operatorId,
+              operator.name,
+              {
+                shipment_id: id,
+                shipment_title: updates.title,
+                changes: 'Shipment details updated'
+              },
+              user?.id
+            );
+          }
         }
       }
 
@@ -1043,7 +1107,9 @@ export function ShipmentsTab() {
                             <label className="block text-xs font-medium text-slate-700 mb-1">Packages (SSCC Numbers)</label>
                             <PackageManager
                               packages={editingPackagesList}
-                              onPackagesChange={setEditingPackagesList}
+                              onChange={setEditingPackagesList}
+                              showLabel={false}
+                              compact={true}
                             />
                           </div>
 
@@ -1141,7 +1207,10 @@ export function ShipmentsTab() {
                   ) : (
                     <>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                        <div
+                          className="flex items-center gap-2 cursor-help"
+                          title={getActivityTooltip(shipment)}
+                        >
                           <Package className="w-4 h-4 text-slate-400" />
                           <span className="text-sm font-medium text-slate-900">{shipment.title}</span>
                         </div>

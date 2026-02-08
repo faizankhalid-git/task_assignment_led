@@ -41,11 +41,21 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
   };
 
   const loadOperatorAssignments = async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayISO = today.toISOString();
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowISO = tomorrow.toISOString();
+
     const { data: shipments } = await supabase
       .from('shipments')
-      .select('id, title, assigned_operators, status')
+      .select('id, title, assigned_operators, status, start')
       .eq('archived', false)
-      .neq('status', 'completed');
+      .neq('status', 'completed')
+      .gte('start', todayISO)
+      .lt('start', tomorrowISO);
 
     if (shipments) {
       const assignments: Record<string, string[]> = {};
@@ -120,13 +130,16 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
     setError('');
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const completedAt = new Date().toISOString();
+
       for (const pkg of packages) {
         const { error: pkgError } = await supabase
           .from('packages')
           .update({
             storage_location: packageLocations[pkg.id].trim(),
             status: 'stored',
-            updated_at: new Date().toISOString()
+            updated_at: completedAt
           })
           .eq('id', pkg.id);
 
@@ -146,7 +159,9 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
           assigned_operators: selectedOperators,
           notes: notes.trim(),
           status: 'completed',
-          updated_at: new Date().toISOString()
+          updated_at: completedAt,
+          completed_by: user?.id,
+          completed_at: completedAt
         })
         .eq('id', shipment.id);
 
@@ -240,15 +255,17 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Add/Remove Packages
             </label>
-            <div className="border border-slate-300 rounded-lg p-3 bg-slate-50">
+            <div className="border border-slate-300 rounded-lg p-3 bg-white">
               <PackageManager
                 packages={newPackagesList}
-                onPackagesChange={setNewPackagesList}
+                onChange={setNewPackagesList}
+                showLabel={false}
+                compact={false}
               />
               {newPackagesList.length > 0 && (
                 <button
                   onClick={handleSaveNewPackages}
-                  className="mt-2 w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                  className="mt-3 w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors shadow-sm"
                 >
                   Save {newPackagesList.length} New Package{newPackagesList.length > 1 ? 's' : ''}
                 </button>
