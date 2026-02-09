@@ -20,6 +20,7 @@ export type Shipment = {
   assigned_operators: string[];
   notes: string;
   status: 'pending' | 'in_progress' | 'completed';
+  intensity: 'low' | 'medium' | 'high';
   updated_at: string;
   archived: boolean;
   created_at: string;

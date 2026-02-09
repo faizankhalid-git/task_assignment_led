@@ -9,9 +9,10 @@ import { NotificationsTab } from './NotificationsTab';
 import { LiveAudioTab } from './LiveAudioTab';
 import { BackupRestoreTab } from './BackupRestoreTab';
 import { AuditLogTab } from './AuditLogTab';
-import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell, Volume2, Radio, Database, History } from 'lucide-react';
+import { KPIDashboard } from './KPIDashboard';
+import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell, Volume2, Radio, Database, History, TrendingUp } from 'lucide-react';
 
-type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'settings' | 'users' | 'backup' | 'audit';
+type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'settings' | 'users' | 'backup';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -63,6 +64,7 @@ export function AdminPanel() {
   const availableTabs = [
     { id: 'shipments' as Tab, label: 'Shipments', icon: Package, permission: 'shipments' as Permission },
     { id: 'operators' as Tab, label: 'Operators', icon: Users, permission: 'operators' as Permission },
+    { id: 'kpi' as Tab, label: 'Performance KPIs', icon: TrendingUp, permission: 'shipments' as Permission },
     { id: 'announcements' as Tab, label: 'Announcements', icon: Bell, permission: 'announcements' as Permission },
     { id: 'live_audio' as Tab, label: 'Live Audio', icon: Radio, permission: 'live_audio' as Permission },
     { id: 'notifications' as Tab, label: 'Notifications', icon: Volume2, permission: 'notifications' as Permission },
@@ -190,6 +192,7 @@ export function AdminPanel() {
             <div className="p-6">
               {activeTab === 'shipments' && hasPermission('shipments') && <ShipmentsTab />}
               {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
+              {activeTab === 'kpi' && hasPermission('shipments') && <KPIDashboard />}
               {activeTab === 'announcements' && hasPermission('announcements') && <AnnouncementsTab />}
               {activeTab === 'live_audio' && hasPermission('live_audio') && <LiveAudioTab />}
               {activeTab === 'notifications' && hasPermission('notifications') && <NotificationsTab />}

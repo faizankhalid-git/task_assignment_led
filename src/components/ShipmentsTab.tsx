@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
-import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X, Search } from 'lucide-react';
+import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X, Search, Zap } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
 import { notificationService } from '../services/notificationService';
 import { auditService } from '../services/auditService';
+import { IntensityLevel } from '../services/kpiService';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const WEEK_NUMBERS = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
@@ -51,6 +52,8 @@ export function ShipmentsTab() {
   const [editingPackagesList, setEditingPackagesList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDelivery, setIsDelivery] = useState(true);
+  const [intensity, setIntensity] = useState<IntensityLevel>('medium');
+  const [editingIntensity, setEditingIntensity] = useState<IntensityLevel>('medium');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -458,6 +461,7 @@ export function ShipmentsTab() {
       car_reg_no: formData.get('car_reg_no') as string,
       status: 'pending',
       archived: false,
+      intensity: intensity,
       assigned_operators: selectedOperators,
       storage_location: '',
       notes: '',
@@ -518,6 +522,7 @@ export function ShipmentsTab() {
       setOperatorSearch('');
       setPackagesList([]);
       setIsDelivery(true);
+      setIntensity('medium');
       setShowNewShipment(false);
       loadShipments();
       alert('Delivery created successfully!');
@@ -538,6 +543,7 @@ export function ShipmentsTab() {
       sscc_numbers: editingPackagesList.length > 0 ? editingPackagesList.join(', ') : '',
       start: formData.get('start') as string,
       car_reg_no: formData.get('car_reg_no') as string,
+      intensity: editingIntensity,
       assigned_operators: selectedOperators,
       updated_at: new Date().toISOString(),
       updated_by: user?.id
@@ -845,8 +851,23 @@ export function ShipmentsTab() {
                   type="text"
                   name="car_reg_no"
                   placeholder="Car Registration"
-                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 col-span-2"
+                  className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
+                <div className="relative">
+                  <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-1">
+                    <Zap className="w-4 h-4 text-blue-600" />
+                    Task Intensity
+                  </label>
+                  <select
+                    value={intensity}
+                    onChange={(e) => setIntensity(e.target.value as IntensityLevel)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="low">Low (1 point)</option>
+                    <option value="medium">Medium (2 points)</option>
+                    <option value="high">High (3 points)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
@@ -955,6 +976,7 @@ export function ShipmentsTab() {
                     setShowNewShipment(false);
                     setSelectedOperators([]);
                     setOperatorSearch('');
+                    setIntensity('medium');
                   }}
                   className="px-4 py-2 bg-slate-300 text-slate-700 rounded-lg hover:bg-slate-400"
                 >
@@ -1153,6 +1175,16 @@ export function ShipmentsTab() {
                               required
                               className="px-2 py-1 border border-slate-300 rounded text-sm"
                             />
+                            <select
+                              value={editingIntensity}
+                              onChange={(e) => setEditingIntensity(e.target.value as IntensityLevel)}
+                              className="px-2 py-1 border border-slate-300 rounded text-sm bg-white"
+                              title="Task Intensity"
+                            >
+                              <option value="low">Low (1pt)</option>
+                              <option value="medium">Medium (2pts)</option>
+                              <option value="high">High (3pts)</option>
+                            </select>
                             <input
                               type="text"
                               name="car_reg_no"
@@ -1328,6 +1360,7 @@ export function ShipmentsTab() {
                             onClick={async () => {
                               setEditingId(shipment.id);
                               setSelectedOperators(shipment.assigned_operators || []);
+                              setEditingIntensity(shipment.intensity || 'medium');
                               await loadPackagesForShipment(shipment.id);
                             }}
                             className="px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded"
