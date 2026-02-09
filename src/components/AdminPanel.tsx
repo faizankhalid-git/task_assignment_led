@@ -117,8 +117,8 @@ export function AdminPanel() {
           id: 'kpi',
           label: 'Performance KPIs',
           icon: TrendingUp,
-          permission: 'shipments',
-          description: 'View performance metrics'
+          permission: 'kpi',
+          description: 'View performance metrics (Super Admin only)'
         },
       ]
     },

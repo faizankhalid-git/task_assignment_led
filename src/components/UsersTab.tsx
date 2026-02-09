@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { UserPlus, Trash2, Edit2, X, Shield, User as UserIcon, Key } from 'lucide-react';
 
-export type Permission = 'led_display' | 'shipments' | 'operators' | 'settings' | 'announcements' | 'users' | 'notifications' | 'live_audio';
+export type Permission = 'led_display' | 'shipments' | 'operators' | 'settings' | 'announcements' | 'users' | 'notifications' | 'live_audio' | 'kpi';
 
 type UserProfile = {
   id: string;
@@ -30,6 +30,7 @@ const AVAILABLE_PERMISSIONS: { id: Permission; label: string; description: strin
   { id: 'notifications', label: 'Notifications', description: 'Configure notification sounds and alerts' },
   { id: 'settings', label: 'Settings', description: 'View and manage settings' },
   { id: 'users', label: 'Users', description: 'Manage users (super admin only)' },
+  { id: 'kpi', label: 'Performance KPIs', description: 'View performance metrics (super admin only)' },
 ];
 
 export function UsersTab() {

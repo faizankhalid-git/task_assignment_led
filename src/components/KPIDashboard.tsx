@@ -1,19 +1,51 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { kpiService, OperatorPerformance, CategoryStatistics, OperatorMissingCategories } from '../services/kpiService';
-import { TrendingUp, Award, BarChart3, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Calendar, Target } from 'lucide-react';
+import { TrendingUp, Award, BarChart3, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Calendar, Target, ShieldAlert } from 'lucide-react';
 
 export function KPIDashboard() {
   const [performance, setPerformance] = useState<OperatorPerformance[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStatistics[]>([]);
   const [missingCategories, setMissingCategories] = useState<OperatorMissingCategories[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
   const [selectedOperator, setSelectedOperator] = useState<string | null>(null);
   const [expandedOperator, setExpandedOperator] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'rankings' | 'categories' | 'balance'>('rankings');
 
   useEffect(() => {
-    loadData();
+    checkAccess();
   }, []);
+
+  const checkAccess = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setHasAccess(false);
+        setLoading(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('permissions')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profile?.permissions?.includes('kpi')) {
+        setHasAccess(true);
+        await loadData();
+      } else {
+        setHasAccess(false);
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Error checking access:', error);
+      setHasAccess(false);
+      setLoading(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -85,6 +117,23 @@ export function KPIDashboard() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-slate-600">Loading KPI data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center max-w-md">
+          <div className="flex justify-center mb-4">
+            <ShieldAlert className="w-16 h-16 text-slate-400" />
+          </div>
+          <h3 className="text-xl font-semibold text-slate-900 mb-2">Access Restricted</h3>
+          <p className="text-slate-600">
+            Performance KPI data is only available to Super Administrators.
+            Please contact your system administrator if you need access to this feature.
+          </p>
         </div>
       </div>
     );
