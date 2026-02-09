@@ -55,13 +55,22 @@ export interface OperatorMissingCategories {
 
 export class KPIService {
   async getAllOperatorPerformance(): Promise<OperatorPerformance[]> {
+    console.log('🔄 KPI Service: Fetching all operator performance...');
+
     const { data, error } = await supabase.rpc('get_operator_performance');
 
     if (error) {
-      console.error('Error fetching operator performance:', error);
+      console.error('❌ KPI Service: Error fetching operator performance:', error);
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
       throw error;
     }
 
+    console.log('✅ KPI Service: Fetched', data?.length || 0, 'operators');
     return data || [];
   }
 

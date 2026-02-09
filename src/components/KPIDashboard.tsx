@@ -5,10 +5,50 @@ import { TrendingUp, Award, BarChart3, AlertTriangle, RefreshCw, ChevronDown, Ch
 
 type TimeRange = 'today' | 'week' | 'month' | 'all';
 
-// Load diagnostics in development mode for troubleshooting
+// Simple diagnostic function available immediately
+(window as any).checkKPIAccess = async () => {
+  console.group('🔍 Quick KPI Access Diagnostic');
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    console.log('User:', user?.email || 'Not logged in');
+
+    if (user) {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role, permissions')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      console.log('Profile:', profile);
+
+      const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+      const hasKpiPerm = profile?.permissions?.includes('kpi');
+
+      console.log('Access Check:', {
+        isAdmin,
+        hasKpiPermission: hasKpiPerm,
+        shouldHaveAccess: isAdmin || hasKpiPerm
+      });
+
+      // Test data fetch
+      const { data: testData, error } = await supabase.rpc('get_operator_performance');
+      console.log('Data availability:', {
+        recordCount: testData?.length || 0,
+        error: error?.message || 'none',
+        sample: testData?.slice(0, 2)
+      });
+    }
+  } catch (e) {
+    console.error('Error:', e);
+  }
+  console.groupEnd();
+};
+console.log('💡 Quick diagnostic available: checkKPIAccess()');
+
+// Load full diagnostics in development mode
 if (import.meta.env.DEV) {
   import('../utils/kpiDiagnostics').then(({ kpiDiagnostics }) => {
-    console.log('💡 KPI Diagnostics loaded. Run: kpiDiagnostics.runFullDiagnostic()');
+    console.log('💡 Full diagnostics available: kpiDiagnostics.runFullDiagnostic()');
   });
 }
 
@@ -34,36 +74,82 @@ export function KPIDashboard() {
 
   const checkAccess = async () => {
     setLoading(true);
+    console.group('🔐 KPI Dashboard Access Check');
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+      if (userError) {
+        console.error('❌ Auth error:', userError);
         setHasAccess(false);
         setLoading(false);
+        console.groupEnd();
         return;
       }
 
-      const { data: profile } = await supabase
+      if (!user) {
+        console.warn('⚠️ No authenticated user found');
+        setHasAccess(false);
+        setLoading(false);
+        console.groupEnd();
+        return;
+      }
+
+      console.log('✅ User authenticated:', user.email);
+
+      const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('role, permissions')
         .eq('id', user.id)
         .maybeSingle();
 
+      if (profileError) {
+        console.error('❌ Profile fetch error:', profileError);
+        setHasAccess(false);
+        setLoading(false);
+        console.groupEnd();
+        return;
+      }
+
+      if (!profile) {
+        console.error('❌ No profile found for user');
+        setHasAccess(false);
+        setLoading(false);
+        console.groupEnd();
+        return;
+      }
+
+      console.log('📋 Profile loaded:', {
+        role: profile.role,
+        permissions: profile.permissions
+      });
+
       // Match backend logic: admin/super_admin OR has kpi permission
       const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
       const hasKpiPermission = profile?.permissions?.includes('kpi');
 
+      console.log('🔍 Access Check:', {
+        isAdmin,
+        hasKpiPermission,
+        willGrantAccess: isAdmin || hasKpiPermission
+      });
+
       if (isAdmin || hasKpiPermission) {
+        console.log('✅ Access GRANTED - Loading KPI data...');
         setHasAccess(true);
         await loadData();
       } else {
+        console.warn('⚠️ Access DENIED - User is not admin and lacks kpi permission');
         setHasAccess(false);
         setLoading(false);
       }
     } catch (error) {
-      console.error('Error checking access:', error);
+      console.error('❌ Exception during access check:', error);
       setHasAccess(false);
       setLoading(false);
     }
+
+    console.groupEnd();
   };
 
   const getDateRangeForFilter = (range: TimeRange) => {
@@ -125,21 +211,36 @@ export function KPIDashboard() {
 
   const loadData = async () => {
     setLoading(true);
+    console.group('📊 Loading KPI Data');
+
     try {
+      console.log('🔄 Fetching data from database...');
+
       const [perfData, catData, missingData] = await Promise.all([
         kpiService.getAllOperatorPerformance(),
         kpiService.getCategoryStatistics(),
         kpiService.getOperatorsMissingCategories()
       ]);
 
+      console.log('✅ Data fetched successfully:', {
+        operators: perfData.length,
+        categories: catData.length,
+        missingCategories: missingData.length
+      });
+
+      console.log('📈 Operator data sample:', perfData.slice(0, 3));
+
       setAllPerformance(perfData);
       setPerformance(perfData);
       setCategoryStats(catData);
       setMissingCategories(missingData);
+
+      console.log('✅ State updated successfully');
     } catch (error) {
-      console.error('Error loading KPI data:', error);
+      console.error('❌ Error loading KPI data:', error);
     } finally {
       setLoading(false);
+      console.groupEnd();
     }
   };
 
