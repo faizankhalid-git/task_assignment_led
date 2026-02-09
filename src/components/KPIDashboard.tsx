@@ -5,6 +5,13 @@ import { TrendingUp, Award, BarChart3, AlertTriangle, RefreshCw, ChevronDown, Ch
 
 type TimeRange = 'today' | 'week' | 'month' | 'all';
 
+// Load diagnostics in development mode for troubleshooting
+if (import.meta.env.DEV) {
+  import('../utils/kpiDiagnostics').then(({ kpiDiagnostics }) => {
+    console.log('💡 KPI Diagnostics loaded. Run: kpiDiagnostics.runFullDiagnostic()');
+  });
+}
+
 export function KPIDashboard() {
   const [allPerformance, setAllPerformance] = useState<OperatorPerformance[]>([]);
   const [performance, setPerformance] = useState<OperatorPerformance[]>([]);
