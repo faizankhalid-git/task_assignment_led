@@ -58,7 +58,43 @@ export function AdminPanel() {
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+
+    const setupRealtimeSubscription = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const channel = supabase
+        .channel('user-profile-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'user_profiles',
+            filter: `id=eq.${user.id}`
+          },
+          (payload) => {
+            const updatedProfile = payload.new as any;
+            setUserProfile({
+              role: updatedProfile.role,
+              full_name: updatedProfile.full_name,
+              permissions: updatedProfile.permissions || [],
+              email: userProfile?.email || ''
+            });
+          }
+        )
+        .subscribe();
+
+      return channel;
+    };
+
+    let channel: any = null;
+    setupRealtimeSubscription().then(ch => { channel = ch; });
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      if (channel) channel.unsubscribe();
+    };
   }, []);
 
   const loadUserProfile = async () => {
@@ -222,7 +258,10 @@ export function AdminPanel() {
     setOpenDropdown(null);
   };
 
-  const toggleDropdown = (groupId: string, directTab?: Tab) => {
+  const toggleDropdown = (groupId: string, directTab?: Tab, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation();
+    }
     if (directTab) {
       handleTabClick(directTab);
     } else {
@@ -273,12 +312,17 @@ export function AdminPanel() {
                   return (
                     <div key={group.id} className="relative">
                       <button
-                        onClick={() => toggleDropdown(group.id, group.directTab)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleDropdown(group.id, group.directTab, e);
+                        }}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium text-sm transition-all ${
                           isActive
                             ? 'bg-blue-50 text-blue-700 shadow-sm'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
+                        type="button"
                       >
                         <GroupIcon className="w-4 h-4" />
                         <span>{group.label}</span>
@@ -298,12 +342,17 @@ export function AdminPanel() {
                             return (
                               <button
                                 key={item.id}
-                                onClick={() => handleTabClick(item.id)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleTabClick(item.id);
+                                }}
                                 className={`w-full flex items-start gap-3 px-4 py-2.5 text-left transition-colors ${
                                   activeTab === item.id
                                     ? 'bg-blue-50 text-blue-700'
                                     : 'text-slate-700 hover:bg-slate-50'
                                 }`}
+                                type="button"
                               >
                                 <ItemIcon className="w-4 h-4 mt-0.5 flex-shrink-0" />
                                 <div className="flex-1 min-w-0">
@@ -381,7 +430,7 @@ export function AdminPanel() {
             <div className="p-6">
               {activeTab === 'shipments' && hasPermission('shipments') && <ShipmentsTab />}
               {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
-              {activeTab === 'kpi' && hasPermission('shipments') && <KPIDashboard />}
+              {activeTab === 'kpi' && hasPermission('kpi') && <KPIDashboard />}
               {activeTab === 'announcements' && hasPermission('announcements') && <AnnouncementsTab />}
               {activeTab === 'live_audio' && hasPermission('live_audio') && <LiveAudioTab />}
               {activeTab === 'notifications' && hasPermission('notifications') && <NotificationsTab />}

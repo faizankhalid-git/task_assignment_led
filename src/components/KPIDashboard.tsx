@@ -3,7 +3,10 @@ import { supabase } from '../lib/supabase';
 import { kpiService, OperatorPerformance, CategoryStatistics, OperatorMissingCategories } from '../services/kpiService';
 import { TrendingUp, Award, BarChart3, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Calendar, Target, ShieldAlert } from 'lucide-react';
 
+type TimeRange = 'today' | 'week' | 'month' | 'all';
+
 export function KPIDashboard() {
+  const [allPerformance, setAllPerformance] = useState<OperatorPerformance[]>([]);
   const [performance, setPerformance] = useState<OperatorPerformance[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStatistics[]>([]);
   const [missingCategories, setMissingCategories] = useState<OperatorMissingCategories[]>([]);
@@ -12,10 +15,15 @@ export function KPIDashboard() {
   const [selectedOperator, setSelectedOperator] = useState<string | null>(null);
   const [expandedOperator, setExpandedOperator] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'rankings' | 'categories' | 'balance'>('rankings');
+  const [timeRange, setTimeRange] = useState<TimeRange>('all');
 
   useEffect(() => {
     checkAccess();
   }, []);
+
+  useEffect(() => {
+    filterDataByTimeRange();
+  }, [timeRange, allPerformance]);
 
   const checkAccess = async () => {
     setLoading(true);
@@ -47,6 +55,63 @@ export function KPIDashboard() {
     }
   };
 
+  const getDateRangeForFilter = (range: TimeRange) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (range) {
+      case 'today':
+        return { start: today, end: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
+      case 'week':
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - 7);
+        return { start: weekStart, end: new Date(now.getTime() + 24 * 60 * 60 * 1000) };
+      case 'month':
+        const monthStart = new Date(today);
+        monthStart.setDate(today.getDate() - 30);
+        return { start: monthStart, end: new Date(now.getTime() + 24 * 60 * 60 * 1000) };
+      case 'all':
+      default:
+        return null;
+    }
+  };
+
+  const filterDataByTimeRange = () => {
+    if (timeRange === 'all' || allPerformance.length === 0) {
+      setPerformance(allPerformance);
+      return;
+    }
+
+    const dateRange = getDateRangeForFilter(timeRange);
+    if (!dateRange) {
+      setPerformance(allPerformance);
+      return;
+    }
+
+    const filtered = allPerformance.map(operator => {
+      const filteredCategories = operator.category_breakdown.filter(cat => {
+        const lastCompletion = new Date(cat.last_completion);
+        return lastCompletion >= dateRange.start && lastCompletion <= dateRange.end;
+      });
+
+      const totalScore = filteredCategories.reduce((sum, cat) => sum + cat.category_score, 0);
+      const totalTasks = filteredCategories.reduce((sum, cat) => sum + cat.task_count, 0);
+
+      return {
+        ...operator,
+        category_breakdown: filteredCategories,
+        total_score: totalScore,
+        total_completed_tasks: totalTasks,
+        avg_score_per_task: totalTasks > 0 ? totalScore / totalTasks : 0
+      };
+    }).filter(op => op.total_completed_tasks > 0);
+
+    const sorted = filtered.sort((a, b) => b.total_score - a.total_score);
+    const ranked = sorted.map((op, index) => ({ ...op, rank: index + 1 }));
+
+    setPerformance(ranked);
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -56,6 +121,7 @@ export function KPIDashboard() {
         kpiService.getOperatorsMissingCategories()
       ]);
 
+      setAllPerformance(perfData);
       setPerformance(perfData);
       setCategoryStats(catData);
       setMissingCategories(missingData);
@@ -147,14 +213,58 @@ export function KPIDashboard() {
             <TrendingUp className="w-6 h-6 text-blue-600" />
             <h2 className="text-xl font-semibold text-slate-900">Operator Performance Dashboard</h2>
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-1 border border-slate-200">
+              <button
+                onClick={() => setTimeRange('today')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  timeRange === 'today'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setTimeRange('week')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  timeRange === 'week'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Week
+              </button>
+              <button
+                onClick={() => setTimeRange('month')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  timeRange === 'month'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Month
+              </button>
+              <button
+                onClick={() => setTimeRange('all')}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  timeRange === 'all'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                All Time
+              </button>
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-2 mb-6 border-b border-slate-200">

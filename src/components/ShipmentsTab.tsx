@@ -168,16 +168,43 @@ export function ShipmentsTab() {
   };
 
   const loadShipments = async () => {
-    const { data } = await supabase
-      .from('shipments_with_users')
-      .select('*')
-      .eq('archived', false)
-      .order('start', { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from('shipments_with_users')
+        .select('*')
+        .eq('archived', false)
+        .order('start', { ascending: true });
 
-    if (data) {
-      setAllShipments(data);
+      if (error) {
+        console.error('Error loading shipments:', error);
+        setLoading(false);
+        return;
+      }
+
+      if (data) {
+        setAllShipments(data);
+        let filtered = data;
+
+        const dateRange = getDateRangeForFilter(selectedDate);
+        if (dateRange) {
+          filtered = filtered.filter(s => {
+            if (!s.start) return false;
+            const shipmentDate = new Date(s.start);
+            return shipmentDate >= dateRange.start && shipmentDate < dateRange.end;
+          });
+        }
+
+        if (selectedStatus !== 'all') {
+          filtered = filtered.filter(s => s.status === selectedStatus);
+        }
+
+        setShipments(filtered);
+      }
+    } catch (error) {
+      console.error('Error loading shipments:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const loadOperators = async () => {
