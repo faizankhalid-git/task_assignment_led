@@ -138,19 +138,34 @@ export class AudioNotificationService {
   }
 
   async playSound(soundType: SoundType, volume?: number) {
-    await this.resumeContext();
+    if (!this.audioContext) {
+      console.error('AudioContext not available');
+      throw new Error('AudioContext not available');
+    }
 
-    if (volume !== undefined) {
-      const previousVolume = this.masterVolume;
-      this.setMasterVolume(volume);
+    console.log(`Audio Context state: ${this.audioContext.state}`);
 
-      this.playSoundInternal(soundType);
+    try {
+      await this.resumeContext();
+      console.log(`After resume - Audio Context state: ${this.audioContext.state}`);
 
-      setTimeout(() => {
-        this.masterVolume = previousVolume;
-      }, 1000);
-    } else {
-      this.playSoundInternal(soundType);
+      if (volume !== undefined) {
+        const previousVolume = this.masterVolume;
+        this.setMasterVolume(volume);
+
+        this.playSoundInternal(soundType);
+
+        setTimeout(() => {
+          this.masterVolume = previousVolume;
+        }, 1000);
+      } else {
+        this.playSoundInternal(soundType);
+      }
+
+      console.log(`Successfully played sound: ${soundType}`);
+    } catch (error) {
+      console.error('Error playing sound:', error);
+      throw error;
     }
   }
 

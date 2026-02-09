@@ -75,12 +75,25 @@ export class NotificationService {
   async playNotification(settingKey: string, customVolume?: number) {
     const setting = this.settings.get(settingKey);
 
-    if (!setting || !setting.setting_value.enabled) {
+    if (!setting) {
+      console.warn(`Notification setting '${settingKey}' not found`);
+      return;
+    }
+
+    if (!setting.setting_value.enabled) {
+      console.log(`Notification '${settingKey}' is disabled`);
       return;
     }
 
     const volume = customVolume ?? setting.setting_value.volume;
-    await audioService.playSound(setting.setting_value.soundType, volume);
+    console.log(`Playing notification: ${settingKey}, sound: ${setting.setting_value.soundType}, volume: ${volume}`);
+
+    try {
+      await audioService.playSound(setting.setting_value.soundType, volume);
+      console.log(`Notification '${settingKey}' played successfully`);
+    } catch (error) {
+      console.error(`Failed to play notification '${settingKey}':`, error);
+    }
   }
 
   async notifyOperatorAssigned(operatorId: string, operatorName: string, triggeredBy?: string) {

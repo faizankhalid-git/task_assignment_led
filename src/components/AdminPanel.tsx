@@ -8,9 +8,10 @@ import { AnnouncementsTab } from './AnnouncementsTab';
 import { NotificationsTab } from './NotificationsTab';
 import { LiveAudioTab } from './LiveAudioTab';
 import { BackupRestoreTab } from './BackupRestoreTab';
-import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell, Volume2, Radio, Database } from 'lucide-react';
+import { AuditLogTab } from './AuditLogTab';
+import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell, Volume2, Radio, Database, History } from 'lucide-react';
 
-type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'settings' | 'users' | 'backup';
+type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'settings' | 'users' | 'backup' | 'audit';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -65,6 +66,7 @@ export function AdminPanel() {
     { id: 'announcements' as Tab, label: 'Announcements', icon: Bell, permission: 'announcements' as Permission },
     { id: 'live_audio' as Tab, label: 'Live Audio', icon: Radio, permission: 'live_audio' as Permission },
     { id: 'notifications' as Tab, label: 'Notifications', icon: Volume2, permission: 'notifications' as Permission },
+    { id: 'audit' as Tab, label: 'Audit Log', icon: History, permission: 'shipments' as Permission },
     { id: 'settings' as Tab, label: 'Settings', icon: Settings, permission: 'settings' as Permission },
     { id: 'users' as Tab, label: 'Users', icon: UserCog, permission: 'users' as Permission },
     { id: 'backup' as Tab, label: 'Backup & Restore', icon: Database, permission: 'settings' as Permission },
@@ -191,6 +193,7 @@ export function AdminPanel() {
               {activeTab === 'announcements' && hasPermission('announcements') && <AnnouncementsTab />}
               {activeTab === 'live_audio' && hasPermission('live_audio') && <LiveAudioTab />}
               {activeTab === 'notifications' && hasPermission('notifications') && <NotificationsTab />}
+              {activeTab === 'audit' && hasPermission('shipments') && <AuditLogTab />}
               {activeTab === 'settings' && hasPermission('settings') && <SettingsTab />}
               {activeTab === 'users' && hasPermission('users') && <UsersTab />}
               {activeTab === 'backup' && hasPermission('settings') && <BackupRestoreTab />}
