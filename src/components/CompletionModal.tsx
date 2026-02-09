@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase, Shipment, Operator, Package as PackageType } from '../lib/supabase';
 import { X, Loader2, Package, Search } from 'lucide-react';
 import { PackageManager } from './PackageManager';
+import { auditService } from '../services/auditService';
 
 type CompletionModalProps = {
   shipment: Shipment;
@@ -166,6 +167,17 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
         .eq('id', shipment.id);
 
       if (updateError) throw updateError;
+
+      await auditService.logShipmentCompletion(
+        shipment.id,
+        user?.id || null,
+        {
+          title: shipment.title,
+          previous_status: shipment.status,
+          packages_count: packages.length,
+          operators: selectedOperators
+        }
+      );
 
       setSaving(false);
       onComplete();

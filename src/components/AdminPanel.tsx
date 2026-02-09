@@ -7,9 +7,10 @@ import { UsersTab, type Permission } from './UsersTab';
 import { AnnouncementsTab } from './AnnouncementsTab';
 import { NotificationsTab } from './NotificationsTab';
 import { LiveAudioTab } from './LiveAudioTab';
-import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell, Volume2, Radio } from 'lucide-react';
+import { BackupRestoreTab } from './BackupRestoreTab';
+import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell, Volume2, Radio, Database } from 'lucide-react';
 
-type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'settings' | 'users';
+type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'settings' | 'users' | 'backup';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -66,6 +67,7 @@ export function AdminPanel() {
     { id: 'notifications' as Tab, label: 'Notifications', icon: Volume2, permission: 'notifications' as Permission },
     { id: 'settings' as Tab, label: 'Settings', icon: Settings, permission: 'settings' as Permission },
     { id: 'users' as Tab, label: 'Users', icon: UserCog, permission: 'users' as Permission },
+    { id: 'backup' as Tab, label: 'Backup & Restore', icon: Database, permission: 'settings' as Permission },
   ];
 
   const tabs = availableTabs.filter(tab => hasPermission(tab.permission));
@@ -191,6 +193,7 @@ export function AdminPanel() {
               {activeTab === 'notifications' && hasPermission('notifications') && <NotificationsTab />}
               {activeTab === 'settings' && hasPermission('settings') && <SettingsTab />}
               {activeTab === 'users' && hasPermission('users') && <UsersTab />}
+              {activeTab === 'backup' && hasPermission('settings') && <BackupRestoreTab />}
             </div>
           </div>
         )}

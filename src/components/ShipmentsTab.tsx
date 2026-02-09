@@ -4,6 +4,7 @@ import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X, S
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
 import { notificationService } from '../services/notificationService';
+import { auditService } from '../services/auditService';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 const WEEK_NUMBERS = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
@@ -172,7 +173,6 @@ export function ShipmentsTab() {
 
     if (data) {
       setAllShipments(data);
-      filterShipments();
     }
     setLoading(false);
   };
@@ -265,6 +265,9 @@ export function ShipmentsTab() {
       return;
     }
 
+    const shipment = allShipments.find(s => s.id === id);
+    const previousStatus = shipment?.status;
+
     setAllShipments(prevShipments =>
       prevShipments.map(s => s.id === id ? { ...s, status } : s)
     );
@@ -273,6 +276,17 @@ export function ShipmentsTab() {
       .from('shipments')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', id);
+
+    if (previousStatus && shipment) {
+      const { data: { user } } = await supabase.auth.getUser();
+      await auditService.logStatusChange(
+        id,
+        user?.id || null,
+        previousStatus,
+        status,
+        shipment.title
+      );
+    }
   };
 
   const formatDate = (dateString: string | null) => {
@@ -472,6 +486,15 @@ export function ShipmentsTab() {
 
       if (packagesError) throw packagesError;
 
+      await auditService.logShipmentCreation(
+        shipmentData.id,
+        user?.id || null,
+        {
+          ...newShipment,
+          packages: packagesList
+        }
+      );
+
       for (const operatorId of selectedOperators) {
         const operator = operators.find(op => op.id === operatorId);
         if (operator) {
@@ -479,6 +502,13 @@ export function ShipmentsTab() {
             operatorId,
             operator.name,
             user?.id
+          );
+
+          await auditService.logOperatorAssignment(
+            shipmentData.id,
+            user?.id || null,
+            operator.name,
+            newShipment.title
           );
         }
       }
@@ -555,6 +585,21 @@ export function ShipmentsTab() {
         currentShipment?.car_reg_no !== updates.car_reg_no ||
         editingPackagesList.length !== (currentShipment?.sscc_numbers?.split(', ').filter(s => s).length || 0);
 
+      const changes = auditService.generateChangesSummary(
+        currentShipment || {},
+        { ...updates, sscc_numbers: updates.sscc_numbers }
+      );
+
+      if (changes.length > 0) {
+        await auditService.logShipmentUpdate(
+          id,
+          user?.id || null,
+          currentShipment,
+          updates,
+          changes
+        );
+      }
+
       for (const operatorId of addedOperators) {
         const operator = operators.find(op => op.id === operatorId);
         if (operator) {
@@ -562,6 +607,13 @@ export function ShipmentsTab() {
             operatorId,
             operator.name,
             user?.id
+          );
+
+          await auditService.logOperatorAssignment(
+            id,
+            user?.id || null,
+            operator.name,
+            updates.title
           );
         }
       }
@@ -591,6 +643,13 @@ export function ShipmentsTab() {
             operatorId,
             operator.name,
             user?.id
+          );
+
+          await auditService.logOperatorRemoval(
+            id,
+            user?.id || null,
+            operator.name,
+            updates.title
           );
         }
       }
