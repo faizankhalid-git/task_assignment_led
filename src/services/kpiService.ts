@@ -11,6 +11,12 @@ export interface OperatorPerformance {
   total_completed_tasks: number;
   total_score: number;
   avg_score_per_task: number;
+  delivery_tasks?: number;
+  delivery_score?: number;
+  avg_delivery_score?: number;
+  non_delivery_tasks?: number;
+  non_delivery_score?: number;
+  avg_non_delivery_score?: number;
   high_intensity_count: number;
   medium_intensity_count: number;
   low_intensity_count: number;
@@ -22,6 +28,7 @@ export interface OperatorPerformance {
 
 export interface CategoryBreakdown {
   category: string;
+  is_delivery: boolean;
   task_count: number;
   category_score: number;
   avg_intensity_score: number;

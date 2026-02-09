@@ -44,11 +44,15 @@ export function KPIDashboard() {
 
       const { data: profile } = await supabase
         .from('user_profiles')
-        .select('permissions')
+        .select('role, permissions')
         .eq('id', user.id)
         .maybeSingle();
 
-      if (profile?.permissions?.includes('kpi')) {
+      // Match backend logic: admin/super_admin OR has kpi permission
+      const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+      const hasKpiPermission = profile?.permissions?.includes('kpi');
+
+      if (isAdmin || hasKpiPermission) {
         setHasAccess(true);
         await loadData();
       } else {
