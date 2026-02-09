@@ -71,8 +71,8 @@ export function AdminPanel() {
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('role, full_name, permissions')
-      .eq('user_id', user.id)
-      .single();
+      .eq('id', user.id)
+      .maybeSingle();
 
     if (profile) {
       setUserProfile({
