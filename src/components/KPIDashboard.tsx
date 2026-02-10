@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { kpiService, OperatorPerformance, CategoryStatistics, OperatorMissingCategories } from '../services/kpiService';
-import { TrendingUp, Award, BarChart3, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Calendar, Target, ShieldAlert } from 'lucide-react';
+import { kpiService, OperatorPerformance, CategoryStatistics, OperatorMissingCategories, ShipmentStats, TaskCategory } from '../services/kpiService';
+import { TrendingUp, Award, BarChart3, AlertTriangle, RefreshCw, ChevronDown, ChevronRight, Calendar, Target, ShieldAlert, Search, X, Plus, Edit2, Trash2, Settings } from 'lucide-react';
 
 type TimeRange = 'today' | 'week' | 'month' | 'all';
+type ActiveView = 'rankings' | 'categories' | 'balance' | 'manage-categories';
 
-// Simple diagnostic function available immediately
 (window as any).checkKPIAccess = async () => {
   console.group('🔍 Quick KPI Access Diagnostic');
   try {
@@ -30,7 +30,6 @@ type TimeRange = 'today' | 'week' | 'month' | 'all';
         shouldHaveAccess: isAdmin || hasKpiPerm
       });
 
-      // Test data fetch
       const { data: testData, error } = await supabase.rpc('get_operator_performance');
       console.log('Data availability:', {
         recordCount: testData?.length || 0,
@@ -45,7 +44,6 @@ type TimeRange = 'today' | 'week' | 'month' | 'all';
 };
 console.log('💡 Quick diagnostic available: checkKPIAccess()');
 
-// Load full diagnostics in development mode
 if (import.meta.env.DEV) {
   import('../utils/kpiDiagnostics').then(({ kpiDiagnostics }) => {
     console.log('💡 Full diagnostics available: kpiDiagnostics.runFullDiagnostic()');
@@ -53,24 +51,34 @@ if (import.meta.env.DEV) {
 }
 
 export function KPIDashboard() {
-  const [allPerformance, setAllPerformance] = useState<OperatorPerformance[]>([]);
   const [performance, setPerformance] = useState<OperatorPerformance[]>([]);
   const [categoryStats, setCategoryStats] = useState<CategoryStatistics[]>([]);
   const [missingCategories, setMissingCategories] = useState<OperatorMissingCategories[]>([]);
+  const [shipmentStats, setShipmentStats] = useState<ShipmentStats | null>(null);
+  const [categories, setCategories] = useState<TaskCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
-  const [selectedOperator, setSelectedOperator] = useState<string | null>(null);
   const [expandedOperator, setExpandedOperator] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'rankings' | 'categories' | 'balance'>('rankings');
+  const [activeView, setActiveView] = useState<ActiveView>('rankings');
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
+  const [balanceSearchQuery, setBalanceSearchQuery] = useState('');
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<TaskCategory | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryColor, setNewCategoryColor] = useState('#6B7280');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     checkAccess();
   }, []);
 
   useEffect(() => {
-    filterDataByTimeRange();
-  }, [timeRange, allPerformance]);
+    if (hasAccess) {
+      loadData();
+    }
+  }, [timeRange, hasAccess]);
 
   const checkAccess = async () => {
     setLoading(true);
@@ -79,16 +87,8 @@ export function KPIDashboard() {
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-      if (userError) {
-        console.error('❌ Auth error:', userError);
-        setHasAccess(false);
-        setLoading(false);
-        console.groupEnd();
-        return;
-      }
-
-      if (!user) {
-        console.warn('⚠️ No authenticated user found');
+      if (userError || !user) {
+        console.error('❌ Auth error or no user');
         setHasAccess(false);
         setLoading(false);
         console.groupEnd();
@@ -103,43 +103,27 @@ export function KPIDashboard() {
         .eq('id', user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error('❌ Profile fetch error:', profileError);
+      if (profileError || !profile) {
+        console.error('❌ Profile error or not found');
         setHasAccess(false);
         setLoading(false);
         console.groupEnd();
         return;
       }
 
-      if (!profile) {
-        console.error('❌ No profile found for user');
-        setHasAccess(false);
-        setLoading(false);
-        console.groupEnd();
-        return;
-      }
+      console.log('📋 Profile loaded:', { role: profile.role, permissions: profile.permissions });
 
-      console.log('📋 Profile loaded:', {
-        role: profile.role,
-        permissions: profile.permissions
-      });
-
-      // Match backend logic: admin/super_admin OR has kpi permission
       const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
       const hasKpiPermission = profile?.permissions?.includes('kpi');
 
-      console.log('🔍 Access Check:', {
-        isAdmin,
-        hasKpiPermission,
-        willGrantAccess: isAdmin || hasKpiPermission
-      });
+      console.log('🔍 Access Check:', { isAdmin, hasKpiPermission, willGrantAccess: isAdmin || hasKpiPermission });
 
       if (isAdmin || hasKpiPermission) {
         console.log('✅ Access GRANTED - Loading KPI data...');
         setHasAccess(true);
         await loadData();
       } else {
-        console.warn('⚠️ Access DENIED - User is not admin and lacks kpi permission');
+        console.warn('⚠️ Access DENIED');
         setHasAccess(false);
         setLoading(false);
       }
@@ -152,61 +136,33 @@ export function KPIDashboard() {
     console.groupEnd();
   };
 
-  const getDateRangeForFilter = (range: TimeRange) => {
+  const getDateRangeForFilter = (range: TimeRange): { start: string; end: string } | null => {
+    if (range === 'all') return null;
+
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+    let startDate: Date;
     switch (range) {
       case 'today':
-        return { start: today, end: new Date(today.getTime() + 24 * 60 * 60 * 1000) };
+        startDate = today;
+        break;
       case 'week':
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - 7);
-        return { start: weekStart, end: new Date(now.getTime() + 24 * 60 * 60 * 1000) };
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 7);
+        break;
       case 'month':
-        const monthStart = new Date(today);
-        monthStart.setDate(today.getDate() - 30);
-        return { start: monthStart, end: new Date(now.getTime() + 24 * 60 * 60 * 1000) };
-      case 'all':
+        startDate = new Date(today);
+        startDate.setDate(today.getDate() - 30);
+        break;
       default:
         return null;
     }
-  };
 
-  const filterDataByTimeRange = () => {
-    if (timeRange === 'all' || allPerformance.length === 0) {
-      setPerformance(allPerformance);
-      return;
-    }
-
-    const dateRange = getDateRangeForFilter(timeRange);
-    if (!dateRange) {
-      setPerformance(allPerformance);
-      return;
-    }
-
-    const filtered = allPerformance.map(operator => {
-      const filteredCategories = operator.category_breakdown.filter(cat => {
-        const lastCompletion = new Date(cat.last_completion);
-        return lastCompletion >= dateRange.start && lastCompletion <= dateRange.end;
-      });
-
-      const totalScore = filteredCategories.reduce((sum, cat) => sum + cat.category_score, 0);
-      const totalTasks = filteredCategories.reduce((sum, cat) => sum + cat.task_count, 0);
-
-      return {
-        ...operator,
-        category_breakdown: filteredCategories,
-        total_score: totalScore,
-        total_completed_tasks: totalTasks,
-        avg_score_per_task: totalTasks > 0 ? totalScore / totalTasks : 0
-      };
-    }).filter(op => op.total_completed_tasks > 0);
-
-    const sorted = filtered.sort((a, b) => b.total_score - a.total_score);
-    const ranked = sorted.map((op, index) => ({ ...op, rank: index + 1 }));
-
-    setPerformance(ranked);
+    return {
+      start: startDate.toISOString(),
+      end: new Date().toISOString()
+    };
   };
 
   const loadData = async () => {
@@ -215,29 +171,37 @@ export function KPIDashboard() {
 
     try {
       console.log('🔄 Fetching data from database...');
+      const dateRange = getDateRangeForFilter(timeRange);
 
-      const [perfData, catData, missingData] = await Promise.all([
-        kpiService.getAllOperatorPerformance(),
+      const [perfData, catData, missingData, statsData, categoriesData] = await Promise.all([
+        dateRange
+          ? kpiService.getFilteredOperatorPerformance(dateRange.start, dateRange.end)
+          : kpiService.getAllOperatorPerformance(),
         kpiService.getCategoryStatistics(),
-        kpiService.getOperatorsMissingCategories()
+        kpiService.getOperatorsMissingCategories(),
+        dateRange
+          ? kpiService.getShipmentStats(dateRange.start, dateRange.end)
+          : kpiService.getShipmentStats(),
+        kpiService.getCategoryList()
       ]);
 
       console.log('✅ Data fetched successfully:', {
         operators: perfData.length,
         categories: catData.length,
-        missingCategories: missingData.length
+        missingCategories: missingData.length,
+        stats: statsData
       });
 
-      console.log('📈 Operator data sample:', perfData.slice(0, 3));
-
-      setAllPerformance(perfData);
       setPerformance(perfData);
       setCategoryStats(catData);
       setMissingCategories(missingData);
+      setShipmentStats(statsData);
+      setCategories(categoriesData);
 
       console.log('✅ State updated successfully');
     } catch (error) {
       console.error('❌ Error loading KPI data:', error);
+      showMessage('error', 'Failed to load KPI data');
     } finally {
       setLoading(false);
       console.groupEnd();
@@ -248,9 +212,59 @@ export function KPIDashboard() {
     try {
       await kpiService.refreshPerformanceMetrics();
       await loadData();
+      showMessage('success', 'Data refreshed successfully');
     } catch (error) {
       console.error('Error refreshing metrics:', error);
+      showMessage('error', 'Failed to refresh data');
     }
+  };
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) {
+      showMessage('error', 'Category name is required');
+      return;
+    }
+
+    try {
+      await kpiService.addCategory(newCategoryName.trim(), newCategoryColor, true);
+      setNewCategoryName('');
+      setNewCategoryColor('#6B7280');
+      setShowCategoryModal(false);
+      await loadData();
+      showMessage('success', 'Category added successfully');
+    } catch (error: any) {
+      console.error('Error adding category:', error);
+      showMessage('error', error.message || 'Failed to add category');
+    }
+  };
+
+  const handleUpdateCategory = async (id: string, updates: any) => {
+    try {
+      await kpiService.updateCategory(id, updates);
+      await loadData();
+      showMessage('success', 'Category updated successfully');
+    } catch (error: any) {
+      console.error('Error updating category:', error);
+      showMessage('error', error.message || 'Failed to update category');
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) return;
+
+    try {
+      await kpiService.deleteCategory(id);
+      await loadData();
+      showMessage('success', 'Category deleted successfully');
+    } catch (error: any) {
+      console.error('Error deleting category:', error);
+      showMessage('error', error.message || 'Failed to delete category');
+    }
+  };
+
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 5000);
   };
 
   const toggleOperatorExpand = (operatorId: string) => {
@@ -289,6 +303,18 @@ export function KPIDashboard() {
     );
   };
 
+  const filteredPerformance = performance.filter(op =>
+    op.operator_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredCategories = categoryStats.filter(cat =>
+    cat.task_category.toLowerCase().includes(categorySearchQuery.toLowerCase())
+  );
+
+  const filteredMissingCategories = missingCategories.filter(mc =>
+    mc.operator_name.toLowerCase().includes(balanceSearchQuery.toLowerCase())
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-96">
@@ -319,6 +345,12 @@ export function KPIDashboard() {
 
   return (
     <div className="space-y-6">
+      {message && (
+        <div className={`p-4 rounded-lg border ${message.type === 'success' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+          {message.text}
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -419,6 +451,19 @@ export function KPIDashboard() {
               Workload Balance
             </div>
           </button>
+          <button
+            onClick={() => setActiveView('manage-categories')}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeView === 'manage-categories'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4" />
+              Manage Categories
+            </div>
+          </button>
         </div>
 
         {activeView === 'rankings' && (
@@ -426,31 +471,53 @@ export function KPIDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="text-sm text-blue-600 font-medium mb-1">Total Operators</div>
-                <div className="text-2xl font-bold text-blue-900">{performance.length}</div>
+                <div className="text-2xl font-bold text-blue-900">{shipmentStats?.total_operators || 0}</div>
+                <div className="text-xs text-blue-600 mt-1">{shipmentStats?.active_operators || 0} active</div>
               </div>
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="text-sm text-green-600 font-medium mb-1">Total Tasks Completed</div>
-                <div className="text-2xl font-bold text-green-900">
-                  {performance.reduce((sum, p) => sum + p.total_completed_tasks, 0)}
-                </div>
+                <div className="text-sm text-green-600 font-medium mb-1">Total Shipments</div>
+                <div className="text-2xl font-bold text-green-900">{shipmentStats?.completed_shipments || 0}</div>
+                <div className="text-xs text-green-600 mt-1">{shipmentStats?.total_operator_tasks || 0} task assignments</div>
               </div>
               <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
                 <div className="text-sm text-purple-600 font-medium mb-1">Total Points</div>
-                <div className="text-2xl font-bold text-purple-900">
-                  {performance.reduce((sum, p) => sum + p.total_score, 0)}
-                </div>
+                <div className="text-2xl font-bold text-purple-900">{shipmentStats?.total_points || 0}</div>
+                <div className="text-xs text-purple-600 mt-1">From completed tasks</div>
               </div>
             </div>
 
-            {performance.length === 0 ? (
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search operators..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                >
+                  <X className="w-5 h-5 text-slate-400 hover:text-slate-600" />
+                </button>
+              )}
+            </div>
+
+            {filteredPerformance.length === 0 ? (
               <div className="text-center py-12 bg-slate-50 rounded-lg">
                 <BarChart3 className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                <p className="text-slate-600 font-medium">No performance data available</p>
-                <p className="text-sm text-slate-500 mt-1">Complete some deliveries to see operator rankings</p>
+                <p className="text-slate-600 font-medium">
+                  {searchQuery ? 'No operators match your search' : 'No performance data available'}
+                </p>
+                <p className="text-sm text-slate-500 mt-1">
+                  {searchQuery ? 'Try different search terms' : 'Complete some deliveries to see operator rankings'}
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {performance.map((op) => (
+                {filteredPerformance.map((op) => (
                   <div
                     key={op.operator_id}
                     className="border border-slate-200 rounded-lg hover:shadow-md transition-shadow"
@@ -574,6 +641,17 @@ export function KPIDashboard() {
                 ))}
               </div>
             )}
+
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <h3 className="text-sm font-semibold text-blue-900 mb-2">About KPI Scoring</h3>
+              <ul className="text-sm text-blue-700 space-y-1">
+                <li>High intensity tasks: 3 points each</li>
+                <li>Medium intensity tasks: 2 points each</li>
+                <li>Low intensity tasks: 1 point each</li>
+                <li>Rankings based on total points from completed deliveries</li>
+                <li>Task categories extracted from shipment title prefixes (INCOMING, OUTGOING, OPI, etc.)</li>
+              </ul>
+            </div>
           </div>
         )}
 
@@ -586,47 +664,66 @@ export function KPIDashboard() {
               </p>
             </div>
 
-            {categoryStats.length === 0 ? (
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search categories..."
+                value={categorySearchQuery}
+                onChange={(e) => setCategorySearchQuery(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {categorySearchQuery && (
+                <button
+                  onClick={() => setCategorySearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                >
+                  <X className="w-5 h-5 text-slate-400 hover:text-slate-600" />
+                </button>
+              )}
+            </div>
+
+            {filteredCategories.length === 0 ? (
               <div className="text-center py-12 bg-slate-50 rounded-lg">
                 <BarChart3 className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                <p className="text-slate-600 font-medium">No category data available</p>
+                <p className="text-slate-600 font-medium">
+                  {categorySearchQuery ? 'No categories match your search' : 'No category data available'}
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {categoryStats.map((cat) => (
+                {filteredCategories.map((cat) => (
                   <div
                     key={cat.task_category}
                     className="p-4 border border-slate-200 rounded-lg hover:shadow-md transition-shadow"
                   >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-3 h-3 rounded-full ${kpiService.getCategoryColor(cat.task_category)}`}
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className={`font-semibold ${kpiService.getCategoryTextColor(cat.task_category)}`}>
-                            {cat.task_category}
-                          </h4>
-                          <span className="text-sm font-medium text-slate-700">{cat.total_tasks} tasks</span>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          <div>
-                            <span className="text-slate-600">Total Score:</span>
-                            <span className="ml-2 font-bold text-blue-600">{cat.total_score}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Operators:</span>
-                            <span className="ml-2 font-medium text-slate-700">{cat.unique_operators}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Avg Tasks/Op:</span>
-                            <span className="ml-2 font-medium text-slate-700">{cat.avg_tasks_per_operator}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Avg Intensity:</span>
-                            <span className="ml-2 font-medium text-slate-700">{cat.avg_score_per_task}</span>
-                          </div>
-                        </div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${kpiService.getCategoryColor(cat.task_category)}`} />
+                        <h4 className="text-lg font-semibold text-slate-900">{cat.task_category}</h4>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-blue-600">{cat.total_score}</div>
+                        <div className="text-xs text-slate-500">total points</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">Total Tasks</div>
+                        <div className="text-lg font-semibold text-slate-900">{cat.total_tasks}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">Unique Operators</div>
+                        <div className="text-lg font-semibold text-slate-900">{cat.unique_operators}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">Avg Tasks/Operator</div>
+                        <div className="text-lg font-semibold text-slate-900">{cat.avg_tasks_per_operator}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-slate-500 mb-1">Avg Score/Task</div>
+                        <div className="text-lg font-semibold text-slate-900">{cat.avg_score_per_task}</div>
                       </div>
                     </div>
                   </div>
@@ -641,64 +738,75 @@ export function KPIDashboard() {
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-slate-900 mb-2">Workload Balance Analysis</h3>
               <p className="text-sm text-slate-600">
-                Operators who haven't performed certain task categories
+                Operators missing coverage in specific task categories
               </p>
             </div>
 
-            {missingCategories.length === 0 ? (
-              <div className="text-center py-12 bg-green-50 border border-green-200 rounded-lg">
-                <Award className="w-12 h-12 text-green-600 mx-auto mb-3" />
-                <p className="text-green-700 font-medium">Perfect Balance!</p>
-                <p className="text-sm text-green-600 mt-1">All active operators have experience in all task categories</p>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search operators..."
+                value={balanceSearchQuery}
+                onChange={(e) => setBalanceSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-10 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {balanceSearchQuery && (
+                <button
+                  onClick={() => setBalanceSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                >
+                  <X className="w-5 h-5 text-slate-400 hover:text-slate-600" />
+                </button>
+              )}
+            </div>
+
+            {filteredMissingCategories.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50 rounded-lg">
+                <AlertTriangle className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                <p className="text-slate-600 font-medium">
+                  {balanceSearchQuery ? 'No operators match your search' : 'No workload balance data available'}
+                </p>
               </div>
             ) : (
               <div className="space-y-3">
-                {missingCategories.map((op) => (
+                {filteredMissingCategories.map((mc) => (
                   <div
-                    key={op.operator_id}
-                    className="p-4 border border-orange-200 bg-orange-50 rounded-lg"
+                    key={mc.operator_id}
+                    className="p-4 border border-slate-200 rounded-lg"
                   >
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-1" />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-semibold text-slate-900">{op.operator_name}</span>
-                          <span className="text-sm text-orange-700 font-medium">
-                            Missing {op.missing_count} {op.missing_count === 1 ? 'category' : 'categories'}
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-slate-900">{mc.operator_name}</h4>
+                      <span className="px-2 py-1 bg-orange-100 text-orange-700 text-sm font-medium rounded">
+                        {mc.missing_count} missing
+                      </span>
+                    </div>
+
+                    <div className="mb-2">
+                      <div className="text-xs font-medium text-slate-600 mb-1">Completed Categories:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {mc.completed_categories.map((cat) => (
+                          <span
+                            key={cat}
+                            className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded"
+                          >
+                            {cat}
                           </span>
-                        </div>
-                        <div className="space-y-2">
-                          <div>
-                            <span className="text-sm text-slate-600 font-medium">Not yet performed:</span>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {op.missing_categories.map((cat) => (
-                                <span
-                                  key={cat}
-                                  className="px-2 py-1 text-xs font-medium text-orange-700 bg-orange-100 border border-orange-300 rounded"
-                                >
-                                  {cat}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="text-sm text-slate-600 font-medium">Completed categories:</span>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {op.completed_categories.length > 0 ? (
-                                op.completed_categories.map((cat) => (
-                                  <span
-                                    key={cat}
-                                    className="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 border border-green-300 rounded"
-                                  >
-                                    {cat}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="text-xs text-slate-500 italic">None</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-xs font-medium text-slate-600 mb-1">Missing Categories:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {mc.missing_categories.map((cat) => (
+                          <span
+                            key={cat}
+                            className="px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded"
+                          >
+                            {cat}
+                          </span>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -708,18 +816,137 @@ export function KPIDashboard() {
           </div>
         )}
 
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h4 className="text-sm font-semibold text-blue-900 mb-2">About KPI Scoring</h4>
-          <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
-            <li>High intensity tasks: 3 points each</li>
-            <li>Medium intensity tasks: 2 points each</li>
-            <li>Low intensity tasks: 1 point each</li>
-            <li>Rankings based on total points from completed deliveries</li>
-            <li>Task categories extracted from shipment title prefixes (INCOMING, OUTGOING, OPI, etc.)</li>
-            <li>Performance metrics update automatically when deliveries are completed</li>
-          </ul>
-        </div>
+        {activeView === 'manage-categories' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Category Management</h3>
+                <p className="text-sm text-slate-600">
+                  Add, edit, or remove task categories for workload tracking
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCategoryModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4" />
+                Add Category
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {categories.map((cat) => (
+                <div
+                  key={cat.id}
+                  className="p-4 border border-slate-200 rounded-lg flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-6 h-6 rounded-full"
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    <div>
+                      <div className="font-semibold text-slate-900">{cat.name}</div>
+                      <div className="text-sm text-slate-600">
+                        {cat.usage_count} shipments • Sort: {cat.sort_order}
+                      </div>
+                    </div>
+                    {cat.active ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 bg-slate-200 text-slate-600 text-xs font-medium rounded">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleUpdateCategory(cat.id, { active: !cat.active })}
+                      className="p-2 text-slate-600 hover:bg-slate-100 rounded"
+                      title={cat.active ? 'Deactivate' : 'Activate'}
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCategory(cat.id)}
+                      disabled={!cat.can_delete}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={cat.can_delete ? 'Delete' : 'Cannot delete category with shipments'}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Add New Category</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g., WAREHOUSE"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Color
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={newCategoryColor}
+                    onChange={(e) => setNewCategoryColor(e.target.value)}
+                    className="w-16 h-10 rounded border border-slate-300 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={newCategoryColor}
+                    onChange={(e) => setNewCategoryColor(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setNewCategoryName('');
+                  setNewCategoryColor('#6B7280');
+                }}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddCategory}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Add Category
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

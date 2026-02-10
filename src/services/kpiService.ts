@@ -53,6 +53,25 @@ export interface OperatorMissingCategories {
   missing_count: number;
 }
 
+export interface TaskCategory {
+  id: string;
+  name: string;
+  color: string;
+  active: boolean;
+  sort_order: number;
+  usage_count: number;
+  can_delete: boolean;
+}
+
+export interface ShipmentStats {
+  total_shipments: number;
+  total_operators: number;
+  active_operators: number;
+  completed_shipments: number;
+  total_operator_tasks: number;
+  total_points: number;
+}
+
 export class KPIService {
   async getAllOperatorPerformance(): Promise<OperatorPerformance[]> {
     console.log('🔄 KPI Service: Fetching all operator performance...');
@@ -115,6 +134,108 @@ export class KPIService {
       console.error('Error refreshing performance metrics:', error);
       throw error;
     }
+  }
+
+  async getFilteredOperatorPerformance(
+    startDate?: string,
+    endDate?: string
+  ): Promise<OperatorPerformance[]> {
+    const { data, error } = await supabase.rpc('get_filtered_operator_performance', {
+      p_start_date: startDate || null,
+      p_end_date: endDate || null
+    });
+
+    if (error) {
+      console.error('Error fetching filtered performance:', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  async getShipmentStats(startDate?: string, endDate?: string): Promise<ShipmentStats> {
+    const { data, error } = await supabase.rpc('get_total_shipment_stats', {
+      p_start_date: startDate || null,
+      p_end_date: endDate || null
+    });
+
+    if (error) {
+      console.error('Error fetching shipment stats:', error);
+      throw error;
+    }
+
+    return data || {
+      total_shipments: 0,
+      total_operators: 0,
+      active_operators: 0,
+      completed_shipments: 0,
+      total_operator_tasks: 0,
+      total_points: 0
+    };
+  }
+
+  async getCategoryList(): Promise<TaskCategory[]> {
+    const { data, error } = await supabase.rpc('get_category_list');
+
+    if (error) {
+      console.error('Error fetching category list:', error);
+      throw error;
+    }
+
+    return data || [];
+  }
+
+  async addCategory(name: string, color?: string, active?: boolean): Promise<string> {
+    const { data, error } = await supabase.rpc('add_task_category', {
+      p_name: name,
+      p_color: color || '#6B7280',
+      p_active: active !== undefined ? active : true
+    });
+
+    if (error) {
+      console.error('Error adding category:', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  async updateCategory(
+    id: string,
+    updates: {
+      name?: string;
+      color?: string;
+      active?: boolean;
+      sort_order?: number;
+    }
+  ): Promise<boolean> {
+    const { data, error } = await supabase.rpc('update_task_category', {
+      p_id: id,
+      p_name: updates.name || null,
+      p_color: updates.color || null,
+      p_active: updates.active !== undefined ? updates.active : null,
+      p_sort_order: updates.sort_order !== undefined ? updates.sort_order : null
+    });
+
+    if (error) {
+      console.error('Error updating category:', error);
+      throw error;
+    }
+
+    return data;
+  }
+
+  async deleteCategory(id: string): Promise<boolean> {
+    const { data, error } = await supabase.rpc('delete_task_category', {
+      p_id: id
+    });
+
+    if (error) {
+      console.error('Error deleting category:', error);
+      throw error;
+    }
+
+    return data;
   }
 
   getIntensityPoints(intensity: IntensityLevel): number {
