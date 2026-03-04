@@ -16,6 +16,7 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
   const [newPackagesList, setNewPackagesList] = useState<string[]>([]);
   const [packageLocations, setPackageLocations] = useState<Record<string, string>>({});
   const [packageDeviations, setPackageDeviations] = useState<Record<string, boolean>>({});
+  const [packageDeviationNotes, setPackageDeviationNotes] = useState<Record<string, string>>({});
   const [newPackagesWithDeviations, setNewPackagesWithDeviations] = useState<PackageWithDeviation[]>([]);
   const [selectedOperators, setSelectedOperators] = useState<string[]>(shipment.assigned_operators || []);
   const [notes, setNotes] = useState(shipment.notes || '');
@@ -152,11 +153,17 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
         if (pkgError) throw pkgError;
 
         if (hasDeviation) {
+          const userNote = packageDeviationNotes[pkg.id] || '';
+          const defaultDescription = `Package ${pkg.sscc_number} flagged with issue during completion. Location: ${packageLocations[pkg.id].trim()}`;
+          const fullDescription = userNote
+            ? `${userNote}\n\nDetails: ${defaultDescription}`
+            : defaultDescription;
+
           await deviationService.createDeviation({
             package_id: pkg.id,
             shipment_id: shipment.id,
             deviation_type: 'missing_from_booking',
-            description: `Package ${pkg.sscc_number} flagged with issue during completion. Location: ${packageLocations[pkg.id].trim()}`,
+            description: fullDescription,
             priority: 'medium'
           });
         }
@@ -229,15 +236,20 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
         setPackages([...packages, ...data]);
         const newLocations = { ...packageLocations };
         const newDeviations = { ...packageDeviations };
+        const newDeviationNotes = { ...packageDeviationNotes };
         data.forEach(pkg => {
           newLocations[pkg.id] = '';
           const deviationInfo = newPackagesWithDeviations.find(p => p.sscc === pkg.sscc_number);
           if (deviationInfo?.hasDeviation) {
             newDeviations[pkg.id] = true;
+            if (deviationInfo.deviationNotes) {
+              newDeviationNotes[pkg.id] = deviationInfo.deviationNotes;
+            }
           }
         });
         setPackageLocations(newLocations);
         setPackageDeviations(newDeviations);
+        setPackageDeviationNotes(newDeviationNotes);
       }
 
       setNewPackagesList([]);
@@ -368,6 +380,17 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
                           <X className="w-4 h-4" />
                         </button>
                       </div>
+                      {hasDeviation && (
+                        <div className="mb-2">
+                          <input
+                            type="text"
+                            value={packageDeviationNotes[pkg.id] || ''}
+                            onChange={(e) => setPackageDeviationNotes({ ...packageDeviationNotes, [pkg.id]: e.target.value })}
+                            className="w-full px-2 py-1.5 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-xs bg-white placeholder-slate-400"
+                            placeholder="Describe the issue (e.g., damaged, missing items, wrong location...)"
+                          />
+                        </div>
+                      )}
                       <input
                         type="text"
                         value={packageLocations[pkg.id] || ''}

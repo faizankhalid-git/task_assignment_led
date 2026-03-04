@@ -36,6 +36,15 @@ export function PackageManager({
     });
     return initial;
   });
+  const [deviationNotes, setDeviationNotes] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    packagesWithDeviations.forEach(pkg => {
+      if (pkg.deviationNotes) {
+        initial[pkg.sscc] = pkg.deviationNotes;
+      }
+    });
+    return initial;
+  });
 
   const addPackage = () => {
     const trimmed = newPackage.trim();
@@ -56,14 +65,18 @@ export function PackageManager({
 
     if (enableDeviationTracking && onDeviationChange) {
       const newDeviationStates = { ...deviationStates };
+      const newDeviationNotes = { ...deviationNotes };
       delete newDeviationStates[removedPkg];
+      delete newDeviationNotes[removedPkg];
       setDeviationStates(newDeviationStates);
+      setDeviationNotes(newDeviationNotes);
 
       const updatedPackages = packages
         .filter((_, i) => i !== index)
         .map(sscc => ({
           sscc,
-          hasDeviation: newDeviationStates[sscc] || false
+          hasDeviation: newDeviationStates[sscc] || false,
+          deviationNotes: newDeviationNotes[sscc]
         }));
       onDeviationChange(updatedPackages);
     }
@@ -78,7 +91,22 @@ export function PackageManager({
 
     const updatedPackages = packages.map(pkg => ({
       sscc: pkg,
-      hasDeviation: newDeviationStates[pkg] || false
+      hasDeviation: newDeviationStates[pkg] || false,
+      deviationNotes: deviationNotes[pkg]
+    }));
+    onDeviationChange(updatedPackages);
+  };
+
+  const updateDeviationNote = (sscc: string, note: string) => {
+    if (!enableDeviationTracking || !onDeviationChange) return;
+
+    const newDeviationNotes = { ...deviationNotes, [sscc]: note };
+    setDeviationNotes(newDeviationNotes);
+
+    const updatedPackages = packages.map(pkg => ({
+      sscc: pkg,
+      hasDeviation: deviationStates[pkg] || false,
+      deviationNotes: newDeviationNotes[pkg]
     }));
     onDeviationChange(updatedPackages);
   };
@@ -134,44 +162,58 @@ export function PackageManager({
           <div className={compact ? 'space-y-1.5' : 'space-y-2'}>
             {packages.map((pkg, index) => {
               const hasDeviation = deviationStates[pkg] || false;
+              const note = deviationNotes[pkg] || '';
               return (
                 <div
                   key={index}
-                  className={`flex items-center justify-between bg-white ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} rounded border transition-colors ${
+                  className={`bg-white rounded border transition-colors ${
                     hasDeviation
                       ? 'border-orange-300 bg-orange-50'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <div className="flex items-center gap-2 flex-1">
-                    {enableDeviationTracking && !disabled && (
+                  <div className={`flex items-center justify-between ${compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
+                    <div className="flex items-center gap-2 flex-1">
+                      {enableDeviationTracking && !disabled && (
+                        <button
+                          type="button"
+                          onClick={() => toggleDeviation(pkg)}
+                          className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                            hasDeviation
+                              ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                          title={hasDeviation ? 'Mark as normal' : 'Mark as deviation'}
+                        >
+                          <AlertTriangle className={`w-3 h-3 ${hasDeviation ? 'text-orange-600' : 'text-slate-400'}`} />
+                          {hasDeviation ? 'Has Issue' : 'OK'}
+                        </button>
+                      )}
+                      <span className={`${compact ? 'text-xs' : 'text-sm'} font-medium ${hasDeviation ? 'text-orange-900' : 'text-slate-900'}`}>
+                        {pkg}
+                      </span>
+                    </div>
+                    {!disabled && (
                       <button
                         type="button"
-                        onClick={() => toggleDeviation(pkg)}
-                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                          hasDeviation
-                            ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                        title={hasDeviation ? 'Mark as normal' : 'Mark as deviation'}
+                        onClick={() => removePackage(index)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
+                        title="Remove package"
                       >
-                        <AlertTriangle className={`w-3 h-3 ${hasDeviation ? 'text-orange-600' : 'text-slate-400'}`} />
-                        {hasDeviation ? 'Has Issue' : 'OK'}
+                        <X className={compact ? 'w-3 h-3' : 'w-4 h-4'} />
                       </button>
                     )}
-                    <span className={`${compact ? 'text-xs' : 'text-sm'} font-medium ${hasDeviation ? 'text-orange-900' : 'text-slate-900'}`}>
-                      {pkg}
-                    </span>
                   </div>
-                  {!disabled && (
-                    <button
-                      type="button"
-                      onClick={() => removePackage(index)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
-                      title="Remove package"
-                    >
-                      <X className={compact ? 'w-3 h-3' : 'w-4 h-4'} />
-                    </button>
+                  {hasDeviation && enableDeviationTracking && !disabled && (
+                    <div className={`border-t border-orange-200 ${compact ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
+                      <input
+                        type="text"
+                        value={note}
+                        onChange={(e) => updateDeviationNote(pkg, e.target.value)}
+                        placeholder="Describe the issue (e.g., damaged, missing items, wrong location...)"
+                        className="w-full px-2 py-1.5 text-xs border border-orange-300 rounded bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 placeholder-slate-400"
+                      />
+                    </div>
                   )}
                 </div>
               );
