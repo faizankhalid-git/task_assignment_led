@@ -10,13 +10,14 @@ import { LiveAudioTab } from './LiveAudioTab';
 import { BackupRestoreTab } from './BackupRestoreTab';
 import { AuditLogTab } from './AuditLogTab';
 import { KPIDashboard } from './KPIDashboard';
+import { DeviationsTab } from './DeviationsTab';
 import {
   Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell,
   Volume2, Radio, Database, History, TrendingUp, ChevronDown,
-  BarChart3, MessageSquare, Cog, LucideIcon
+  BarChart3, MessageSquare, Cog, LucideIcon, AlertTriangle
 } from 'lucide-react';
 
-type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'settings' | 'users' | 'backup';
+type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'settings' | 'users' | 'backup' | 'deviations';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -141,6 +142,13 @@ export function AdminPanel() {
           icon: Package,
           permission: 'shipments',
           description: 'Manage deliveries and shipments'
+        },
+        {
+          id: 'deviations',
+          label: 'Deviations',
+          icon: AlertTriangle,
+          permission: 'shipments',
+          description: 'Track and resolve package discrepancies'
         },
         {
           id: 'operators',
@@ -429,6 +437,7 @@ export function AdminPanel() {
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-6">
               {activeTab === 'shipments' && hasPermission('shipments') && <ShipmentsTab />}
+              {activeTab === 'deviations' && hasPermission('shipments') && <DeviationsTab />}
               {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
               {activeTab === 'kpi' && hasPermission('kpi') && <KPIDashboard />}
               {activeTab === 'announcements' && hasPermission('announcements') && <AnnouncementsTab />}

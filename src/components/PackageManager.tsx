@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, AlertTriangle } from 'lucide-react';
+
+export interface PackageWithDeviation {
+  sscc: string;
+  hasDeviation: boolean;
+  deviationNotes?: string;
+}
 
 type PackageManagerProps = {
   packages: string[];
@@ -7,6 +13,9 @@ type PackageManagerProps = {
   disabled?: boolean;
   showLabel?: boolean;
   compact?: boolean;
+  enableDeviationTracking?: boolean;
+  packagesWithDeviations?: PackageWithDeviation[];
+  onDeviationChange?: (packages: PackageWithDeviation[]) => void;
 };
 
 export function PackageManager({
@@ -14,9 +23,19 @@ export function PackageManager({
   onChange,
   disabled = false,
   showLabel = true,
-  compact = false
+  compact = false,
+  enableDeviationTracking = false,
+  packagesWithDeviations = [],
+  onDeviationChange
 }: PackageManagerProps) {
   const [newPackage, setNewPackage] = useState('');
+  const [deviationStates, setDeviationStates] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    packagesWithDeviations.forEach(pkg => {
+      initial[pkg.sscc] = pkg.hasDeviation;
+    });
+    return initial;
+  });
 
   const addPackage = () => {
     const trimmed = newPackage.trim();
@@ -32,7 +51,36 @@ export function PackageManager({
   };
 
   const removePackage = (index: number) => {
+    const removedPkg = packages[index];
     onChange(packages.filter((_, i) => i !== index));
+
+    if (enableDeviationTracking && onDeviationChange) {
+      const newDeviationStates = { ...deviationStates };
+      delete newDeviationStates[removedPkg];
+      setDeviationStates(newDeviationStates);
+
+      const updatedPackages = packages
+        .filter((_, i) => i !== index)
+        .map(sscc => ({
+          sscc,
+          hasDeviation: newDeviationStates[sscc] || false
+        }));
+      onDeviationChange(updatedPackages);
+    }
+  };
+
+  const toggleDeviation = (sscc: string) => {
+    if (!enableDeviationTracking || !onDeviationChange) return;
+
+    const newState = !deviationStates[sscc];
+    const newDeviationStates = { ...deviationStates, [sscc]: newState };
+    setDeviationStates(newDeviationStates);
+
+    const updatedPackages = packages.map(pkg => ({
+      sscc: pkg,
+      hasDeviation: newDeviationStates[pkg] || false
+    }));
+    onDeviationChange(updatedPackages);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -73,28 +121,61 @@ export function PackageManager({
 
       {packages.length > 0 && (
         <div className={`bg-slate-50 border border-slate-200 rounded-lg ${compact ? 'p-2 max-h-36' : 'p-3 max-h-48'} overflow-y-auto`}>
-          <div className="text-xs font-medium text-slate-500 mb-2">
-            {packages.length} package{packages.length !== 1 ? 's' : ''} added
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-medium text-slate-500">
+              {packages.length} package{packages.length !== 1 ? 's' : ''} added
+            </div>
+            {enableDeviationTracking && (
+              <div className="text-xs text-orange-600 font-medium">
+                {Object.values(deviationStates).filter(Boolean).length} with deviation
+              </div>
+            )}
           </div>
           <div className={compact ? 'space-y-1.5' : 'space-y-2'}>
-            {packages.map((pkg, index) => (
-              <div
-                key={index}
-                className={`flex items-center justify-between bg-white ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} rounded border border-slate-200 hover:border-slate-300 transition-colors`}
-              >
-                <span className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-slate-900`}>{pkg}</span>
-                {!disabled && (
-                  <button
-                    type="button"
-                    onClick={() => removePackage(index)}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
-                    title="Remove package"
-                  >
-                    <X className={compact ? 'w-3 h-3' : 'w-4 h-4'} />
-                  </button>
-                )}
-              </div>
-            ))}
+            {packages.map((pkg, index) => {
+              const hasDeviation = deviationStates[pkg] || false;
+              return (
+                <div
+                  key={index}
+                  className={`flex items-center justify-between bg-white ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} rounded border transition-colors ${
+                    hasDeviation
+                      ? 'border-orange-300 bg-orange-50'
+                      : 'border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1">
+                    {enableDeviationTracking && !disabled && (
+                      <button
+                        type="button"
+                        onClick={() => toggleDeviation(pkg)}
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                          hasDeviation
+                            ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                        title={hasDeviation ? 'Mark as normal' : 'Mark as deviation'}
+                      >
+                        <AlertTriangle className={`w-3 h-3 ${hasDeviation ? 'text-orange-600' : 'text-slate-400'}`} />
+                        {hasDeviation ? 'Has Issue' : 'OK'}
+                      </button>
+                    )}
+                    <span className={`${compact ? 'text-xs' : 'text-sm'} font-medium ${hasDeviation ? 'text-orange-900' : 'text-slate-900'}`}>
+                      {pkg}
+                    </span>
+                  </div>
+                  {!disabled && (
+                    <button
+                      type="button"
+                      onClick={() => removePackage(index)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors"
+                      title="Remove package"
+                    >
+                      <X className={compact ? 'w-3 h-3' : 'w-4 h-4'} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
