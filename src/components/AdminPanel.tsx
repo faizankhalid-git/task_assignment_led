@@ -11,9 +11,13 @@ import { BackupRestoreTab } from './BackupRestoreTab';
 import { AuditLogTab } from './AuditLogTab';
 import { KPIDashboard } from './KPIDashboard';
 import { DeviationsTab } from './DeviationsTab';
-import { Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell, Volume2, Radio, Database, History, TrendingUp, ChevronDown, BarChart3, MessageSquare, Cog, Video as LucideIcon, AlertTriangle } from 'lucide-react';
+import {
+  Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell,
+  Volume2, Radio, Database, History, TrendingUp, ChevronDown,
+  BarChart3, MessageSquare, Cog, AlertTriangle, type LucideIcon
+} from 'lucide-react';
 
-type Tab = 'shipments' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'settings' | 'users' | 'backup' | 'deviations';
+type Tab = 'shipments' | 'deviations' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'settings' | 'users' | 'backup';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';

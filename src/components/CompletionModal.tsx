@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase, Shipment, Operator, Package as PackageType } from '../lib/supabase';
-import { X, Loader2, Package, Search } from 'lucide-react';
-import { PackageManager } from './PackageManager';
+import { X, Loader2, Package, Search, AlertTriangle } from 'lucide-react';
+import { PackageManager, PackageWithDeviation } from './PackageManager';
 import { auditService } from '../services/auditService';
+import { deviationService } from '../services/deviationService';
 
 type CompletionModalProps = {
   shipment: Shipment;
@@ -14,6 +15,8 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
   const [packages, setPackages] = useState<PackageType[]>([]);
   const [newPackagesList, setNewPackagesList] = useState<string[]>([]);
   const [packageLocations, setPackageLocations] = useState<Record<string, string>>({});
+  const [packageDeviations, setPackageDeviations] = useState<Record<string, boolean>>({});
+  const [newPackagesWithDeviations, setNewPackagesWithDeviations] = useState<PackageWithDeviation[]>([]);
   const [selectedOperators, setSelectedOperators] = useState<string[]>(shipment.assigned_operators || []);
   const [notes, setNotes] = useState(shipment.notes || '');
   const [operators, setOperators] = useState<Operator[]>([]);
@@ -135,16 +138,28 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
       const completedAt = new Date().toISOString();
 
       for (const pkg of packages) {
+        const hasDeviation = packageDeviations[pkg.id] || false;
         const { error: pkgError } = await supabase
           .from('packages')
           .update({
             storage_location: packageLocations[pkg.id].trim(),
             status: 'stored',
+            has_deviation: hasDeviation,
             updated_at: completedAt
           })
           .eq('id', pkg.id);
 
         if (pkgError) throw pkgError;
+
+        if (hasDeviation) {
+          await deviationService.createDeviation({
+            package_id: pkg.id,
+            shipment_id: shipment.id,
+            deviation_type: 'missing_from_booking',
+            description: `Package ${pkg.sscc_number} flagged with issue during completion. Location: ${packageLocations[pkg.id].trim()}`,
+            priority: 'medium'
+          });
+        }
       }
 
       const allPackageNumbers = packages.map(p => p.sscc_number);
@@ -193,11 +208,15 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
     }
 
     try {
-      const packagesData = newPackagesList.map(sscc => ({
-        shipment_id: shipment.id,
-        sscc_number: sscc,
-        status: 'pending'
-      }));
+      const packagesData = newPackagesList.map(sscc => {
+        const deviationInfo = newPackagesWithDeviations.find(p => p.sscc === sscc);
+        return {
+          shipment_id: shipment.id,
+          sscc_number: sscc,
+          status: 'pending',
+          has_deviation: deviationInfo?.hasDeviation || false
+        };
+      });
 
       const { data, error } = await supabase
         .from('packages')
@@ -209,13 +228,20 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
       if (data) {
         setPackages([...packages, ...data]);
         const newLocations = { ...packageLocations };
+        const newDeviations = { ...packageDeviations };
         data.forEach(pkg => {
           newLocations[pkg.id] = '';
+          const deviationInfo = newPackagesWithDeviations.find(p => p.sscc === pkg.sscc_number);
+          if (deviationInfo?.hasDeviation) {
+            newDeviations[pkg.id] = true;
+          }
         });
         setPackageLocations(newLocations);
+        setPackageDeviations(newDeviations);
       }
 
       setNewPackagesList([]);
+      setNewPackagesWithDeviations([]);
       setError('');
     } catch (err) {
       setError('Failed to add new packages');
@@ -273,6 +299,9 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
                 onChange={setNewPackagesList}
                 showLabel={false}
                 compact={false}
+                enableDeviationTracking={true}
+                packagesWithDeviations={newPackagesWithDeviations}
+                onDeviationChange={setNewPackagesWithDeviations}
               />
               {newPackagesList.length > 0 && (
                 <button
@@ -295,30 +324,60 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
               <div className="text-sm text-slate-500 py-4 text-center">No packages found</div>
             ) : (
               <div className="space-y-3 max-h-64 overflow-y-auto border border-slate-200 rounded-lg p-3">
-                {packages.map((pkg) => (
-                  <div key={pkg.id} className="bg-white p-3 rounded-lg border border-slate-200">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <Package className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm font-semibold text-slate-900">{pkg.sscc_number}</span>
+                {packages.map((pkg) => {
+                  const hasDeviation = packageDeviations[pkg.id] || false;
+                  return (
+                    <div
+                      key={pkg.id}
+                      className={`p-3 rounded-lg border transition-colors ${
+                        hasDeviation
+                          ? 'bg-orange-50 border-orange-300'
+                          : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 flex-1">
+                          <Package className="w-4 h-4 text-slate-400" />
+                          <span className={`text-sm font-semibold ${hasDeviation ? 'text-orange-900' : 'text-slate-900'}`}>
+                            {pkg.sscc_number}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPackageDeviations({
+                                ...packageDeviations,
+                                [pkg.id]: !hasDeviation
+                              });
+                            }}
+                            className={`ml-2 flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                              hasDeviation
+                                ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            }`}
+                            title={hasDeviation ? 'Mark as normal' : 'Mark as deviation'}
+                          >
+                            <AlertTriangle className={`w-3 h-3 ${hasDeviation ? 'text-orange-600' : 'text-slate-400'}`} />
+                            {hasDeviation ? 'Has Issue' : 'OK'}
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => handleRemovePackage(pkg.id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 rounded"
+                          title="Remove package"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleRemovePackage(pkg.id)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1 rounded"
-                        title="Remove package"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
+                      <input
+                        type="text"
+                        value={packageLocations[pkg.id] || ''}
+                        onChange={(e) => setPackageLocations({ ...packageLocations, [pkg.id]: e.target.value })}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        placeholder="e.g., Warehouse A, Bay 12"
+                      />
                     </div>
-                    <input
-                      type="text"
-                      value={packageLocations[pkg.id] || ''}
-                      onChange={(e) => setPackageLocations({ ...packageLocations, [pkg.id]: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      placeholder="e.g., Warehouse A, Bay 12"
-                    />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
