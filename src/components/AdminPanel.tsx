@@ -11,13 +11,15 @@ import { BackupRestoreTab } from './BackupRestoreTab';
 import { AuditLogTab } from './AuditLogTab';
 import { KPIDashboard } from './KPIDashboard';
 import { DeviationsTab } from './DeviationsTab';
+import { PackageSearch } from './PackageSearch';
+import { PackageDetailsModal } from './PackageDetailsModal';
 import {
   Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell,
   Volume2, Radio, Database, History, TrendingUp, ChevronDown,
-  BarChart3, MessageSquare, Cog, AlertTriangle, type LucideIcon
+  BarChart3, MessageSquare, Cog, AlertTriangle, Search, type LucideIcon
 } from 'lucide-react';
 
-type Tab = 'shipments' | 'deviations' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'settings' | 'users' | 'backup';
+type Tab = 'shipments' | 'packages' | 'deviations' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'settings' | 'users' | 'backup';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -47,6 +49,7 @@ export function AdminPanel() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -142,6 +145,13 @@ export function AdminPanel() {
           icon: Package,
           permission: 'shipments',
           description: 'Manage deliveries and shipments'
+        },
+        {
+          id: 'packages',
+          label: 'Package Search',
+          icon: Search,
+          permission: 'shipments',
+          description: 'Search and view package details'
         },
         {
           id: 'deviations',
@@ -437,6 +447,9 @@ export function AdminPanel() {
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
             <div className="p-6">
               {activeTab === 'shipments' && hasPermission('shipments') && <ShipmentsTab />}
+              {activeTab === 'packages' && hasPermission('shipments') && (
+                <PackageSearch onSelectPackage={setSelectedPackage} />
+              )}
               {activeTab === 'deviations' && hasPermission('shipments') && <DeviationsTab />}
               {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
               {activeTab === 'kpi' && hasPermission('kpi') && <KPIDashboard />}
@@ -451,6 +464,13 @@ export function AdminPanel() {
           </div>
         )}
       </main>
+
+      {selectedPackage && (
+        <PackageDetailsModal
+          packageData={selectedPackage}
+          onClose={() => setSelectedPackage(null)}
+        />
+      )}
     </div>
   );
 }
