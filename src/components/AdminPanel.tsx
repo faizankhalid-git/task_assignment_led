@@ -402,21 +402,6 @@ export function AdminPanel() {
                   <span className="hidden lg:inline">Search</span>
                 </button>
               )}
-              {userProfile && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-slate-200">
-                  {userProfile.role === 'super_admin' && (
-                    <Shield className="w-4 h-4 text-purple-600" />
-                  )}
-                  <div className="text-left">
-                    <div className="text-sm font-medium text-slate-900 leading-tight">
-                      {userProfile.full_name || userProfile.email}
-                    </div>
-                    <div className="text-xs text-slate-500 capitalize">
-                      {userProfile.role.replace('_', ' ')}
-                    </div>
-                  </div>
-                </div>
-              )}
               {hasPermission('led_display') && (
                 <a
                   href="/led"
@@ -437,6 +422,21 @@ export function AdminPanel() {
                 <LogOut className="w-4 h-4" />
                 <span className="hidden lg:inline">Sign Out</span>
               </button>
+              {userProfile && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-lg border border-slate-200 ml-2">
+                  {userProfile.role === 'super_admin' && (
+                    <Shield className="w-4 h-4 text-purple-600" />
+                  )}
+                  <div className="text-left">
+                    <div className="text-sm font-medium text-slate-900 leading-tight">
+                      {userProfile.full_name || userProfile.email}
+                    </div>
+                    <div className="text-xs text-slate-500 capitalize">
+                      {userProfile.role.replace('_', ' ')}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
