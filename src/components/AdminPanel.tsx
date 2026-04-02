@@ -50,7 +50,12 @@ export function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [quickSearchTerm, setQuickSearchTerm] = useState('');
+  const [quickSearchResults, setQuickSearchResults] = useState<any[]>([]);
+  const [showQuickSearch, setShowQuickSearch] = useState(false);
+  const [quickSearching, setQuickSearching] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadUserProfile();
@@ -58,6 +63,9 @@ export function AdminPanel() {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setOpenDropdown(null);
+      }
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowQuickSearch(false);
       }
     };
 
@@ -131,6 +139,64 @@ export function AdminPanel() {
 
   const hasPermission = (permission: Permission) => {
     return userProfile?.permissions?.includes(permission) || false;
+  };
+
+  const handleQuickSearch = async (term: string) => {
+    if (!term.trim()) {
+      setQuickSearchResults([]);
+      return;
+    }
+
+    setQuickSearching(true);
+    try {
+      const { data: packages, error } = await supabase
+        .from('packages')
+        .select(`
+          *,
+          shipment:shipments!packages_shipment_id_fkey(
+            id,
+            title,
+            status
+          )
+        `)
+        .ilike('sscc_number', `%${term.trim()}%`)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      if (packages) {
+        const packagesWithDeviations = await Promise.all(
+          packages.map(async (pkg) => {
+            if (pkg.has_deviation) {
+              const { data: deviation } = await supabase
+                .from('package_deviations')
+                .select('id, deviation_type, description, status')
+                .eq('package_id', pkg.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              return { ...pkg, deviation };
+            }
+            return pkg;
+          })
+        );
+
+        setQuickSearchResults(packagesWithDeviations);
+      }
+    } catch (error) {
+      console.error('Quick search error:', error);
+      setQuickSearchResults([]);
+    } finally {
+      setQuickSearching(false);
+    }
+  };
+
+  const handleQuickSearchChange = (value: string) => {
+    setQuickSearchTerm(value);
+    setShowQuickSearch(true);
+    handleQuickSearch(value);
   };
 
   const navGroups: NavGroup[] = [
@@ -390,7 +456,96 @@ export function AdminPanel() {
               </nav>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {hasPermission('shipments') && (
+                <div ref={searchRef} className="relative">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={quickSearchTerm}
+                      onChange={(e) => handleQuickSearchChange(e.target.value)}
+                      onFocus={() => setShowQuickSearch(true)}
+                      placeholder="Search packages..."
+                      className="w-64 pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                    />
+                  </div>
+
+                  {showQuickSearch && quickSearchTerm && (
+                    <div className="absolute right-0 mt-2 w-96 bg-white rounded-lg shadow-xl border border-slate-200 z-50 max-h-96 overflow-y-auto">
+                      {quickSearching ? (
+                        <div className="p-4 text-center">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                          <p className="text-xs text-slate-500 mt-2">Searching...</p>
+                        </div>
+                      ) : quickSearchResults.length === 0 ? (
+                        <div className="p-4 text-center">
+                          <PackageIcon className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                          <p className="text-sm text-slate-600">No packages found</p>
+                          <p className="text-xs text-slate-500 mt-1">Try a different SSCC number</p>
+                        </div>
+                      ) : (
+                        <div className="py-2">
+                          <div className="px-3 py-2 border-b border-slate-200 bg-slate-50">
+                            <p className="text-xs font-medium text-slate-700">
+                              Found {quickSearchResults.length} package{quickSearchResults.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                          {quickSearchResults.map((pkg) => (
+                            <button
+                              key={pkg.id}
+                              onClick={() => {
+                                setSelectedPackage(pkg);
+                                setShowQuickSearch(false);
+                                setQuickSearchTerm('');
+                              }}
+                              className="w-full px-3 py-2 hover:bg-slate-50 transition-colors text-left border-b border-slate-100 last:border-0"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <PackageIcon className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                    <span className="text-sm font-semibold text-slate-900 truncate">
+                                      {pkg.sscc_number}
+                                    </span>
+                                    {pkg.has_deviation && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-700 flex-shrink-0">
+                                        Issue
+                                      </span>
+                                    )}
+                                  </div>
+                                  {pkg.shipment && (
+                                    <p className="text-xs text-slate-600 truncate">
+                                      {pkg.shipment.title}
+                                    </p>
+                                  )}
+                                  {pkg.storage_location && (
+                                    <p className="text-xs text-slate-500 mt-0.5 truncate">
+                                      {pkg.storage_location}
+                                    </p>
+                                  )}
+                                </div>
+                                <span
+                                  className={`text-xs px-2 py-0.5 rounded font-medium flex-shrink-0 ${
+                                    pkg.status === 'stored'
+                                      ? 'bg-green-100 text-green-700'
+                                      : pkg.status === 'pending'
+                                      ? 'bg-yellow-100 text-yellow-700'
+                                      : 'bg-slate-100 text-slate-700'
+                                  }`}
+                                >
+                                  {pkg.status}
+                                </span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {userProfile && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
                   {userProfile.role === 'super_admin' && (
