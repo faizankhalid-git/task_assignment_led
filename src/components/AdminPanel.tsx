@@ -391,11 +391,11 @@ export function AdminPanel() {
               </nav>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {hasPermission('shipments') && (
                 <button
                   onClick={() => setShowSearchModal(true)}
-                  className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2 text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-white text-slate-700 rounded-lg hover:bg-slate-50 border border-slate-200 flex items-center gap-2 text-sm font-medium transition-colors"
                   title="Search Packages"
                 >
                   <Search className="w-4 h-4" />
@@ -403,11 +403,11 @@ export function AdminPanel() {
                 </button>
               )}
               {userProfile && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-slate-200">
                   {userProfile.role === 'super_admin' && (
                     <Shield className="w-4 h-4 text-purple-600" />
                   )}
-                  <div className="text-right">
+                  <div className="text-left">
                     <div className="text-sm font-medium text-slate-900 leading-tight">
                       {userProfile.full_name || userProfile.email}
                     </div>
@@ -422,7 +422,7 @@ export function AdminPanel() {
                   href="/led"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2 text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-white text-slate-700 rounded-lg hover:bg-slate-50 border border-slate-200 flex items-center gap-2 text-sm font-medium transition-colors"
                   title="Open LED Display"
                 >
                   <Monitor className="w-4 h-4" />
@@ -431,7 +431,7 @@ export function AdminPanel() {
               )}
               <button
                 onClick={handleSignOut}
-                className="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2 text-sm font-medium transition-colors"
+                className="px-4 py-2 bg-white text-slate-700 rounded-lg hover:bg-slate-50 border border-slate-200 flex items-center gap-2 text-sm font-medium transition-colors"
                 title="Sign Out"
               >
                 <LogOut className="w-4 h-4" />
@@ -496,7 +496,7 @@ export function AdminPanel() {
               </button>
             </div>
             <div className="p-4">
-              <PackageSearch onPackageSelect={(pkg) => {
+              <PackageSearch onSelectPackage={(pkg) => {
                 setSelectedPackage(pkg);
                 setShowSearchModal(false);
               }} />
