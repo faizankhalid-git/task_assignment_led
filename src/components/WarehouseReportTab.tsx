@@ -19,6 +19,9 @@ export function WarehouseReportTab() {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<'all' | 'current' | 'completed'>('all');
   const [sortBy, setSortBy] = useState<'duration' | 'arrival'>('duration');
+  const [dateFilter, setDateFilter] = useState<'all' | 'week' | 'month' | '6months' | 'custom'>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
     loadPackageReport();
@@ -84,6 +87,26 @@ export function WarehouseReportTab() {
       filtered = filtered.filter(pkg => pkg.is_still_in_warehouse);
     } else if (filterStatus === 'completed') {
       filtered = filtered.filter(pkg => !pkg.is_still_in_warehouse);
+    }
+
+    const now = new Date();
+    if (dateFilter === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter(pkg => new Date(pkg.arrived_at) >= weekAgo);
+    } else if (dateFilter === 'month') {
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter(pkg => new Date(pkg.arrived_at) >= monthAgo);
+    } else if (dateFilter === '6months') {
+      const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+      filtered = filtered.filter(pkg => new Date(pkg.arrived_at) >= sixMonthsAgo);
+    } else if (dateFilter === 'custom' && startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(pkg => {
+        const date = new Date(pkg.arrived_at);
+        return date >= start && date <= end;
+      });
     }
 
     if (sortBy === 'duration') {
@@ -193,54 +216,133 @@ export function WarehouseReportTab() {
       </div>
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-600" />
-            <label className="text-sm font-medium text-slate-700">Filter:</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFilterStatus('current')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === 'current'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
+        <div className="space-y-4 mb-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-600" />
+              <label className="text-sm font-medium text-slate-700">Status:</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFilterStatus('current')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'current'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Current ({currentPackages.length})
+                </button>
+                <button
+                  onClick={() => setFilterStatus('completed')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'completed'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Completed
+                </button>
+                <button
+                  onClick={() => setFilterStatus('all')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    filterStatus === 'all'
+                      ? 'bg-slate-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  All
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <label className="text-sm font-medium text-slate-700">Sort:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'duration' | 'arrival')}
+                className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                Current ({currentPackages.length})
-              </button>
-              <button
-                onClick={() => setFilterStatus('completed')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === 'completed'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                Completed
-              </button>
-              <button
-                onClick={() => setFilterStatus('all')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  filterStatus === 'all'
-                    ? 'bg-slate-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                All
-              </button>
+                <option value="duration">Duration (Longest first)</option>
+                <option value="arrival">Arrival (Newest first)</option>
+              </select>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 ml-auto">
-            <label className="text-sm font-medium text-slate-700">Sort by:</label>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as 'duration' | 'arrival')}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="duration">Duration (Longest first)</option>
-              <option value="arrival">Arrival (Newest first)</option>
-            </select>
+          <div className="flex flex-wrap items-center gap-4 border-t border-slate-200 pt-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-slate-600" />
+              <label className="text-sm font-medium text-slate-700">Date Range:</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setDateFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    dateFilter === 'all'
+                      ? 'bg-slate-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  All Time
+                </button>
+                <button
+                  onClick={() => setDateFilter('week')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    dateFilter === 'week'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Last Week
+                </button>
+                <button
+                  onClick={() => setDateFilter('month')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    dateFilter === 'month'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Last Month
+                </button>
+                <button
+                  onClick={() => setDateFilter('6months')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    dateFilter === '6months'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Last 6 Months
+                </button>
+                <button
+                  onClick={() => setDateFilter('custom')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    dateFilter === 'custom'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Custom
+                </button>
+              </div>
+            </div>
+
+            {dateFilter === 'custom' && (
+              <div className="flex items-center gap-2 ml-auto">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+                <span className="text-slate-500">to</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                />
+              </div>
+            )}
           </div>
         </div>
 

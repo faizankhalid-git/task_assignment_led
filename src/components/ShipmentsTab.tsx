@@ -984,6 +984,7 @@ export function ShipmentsTab() {
               <PackageManager
                 packages={packagesList}
                 onChange={setPackagesList}
+                shipmentType={shipmentType}
               />
 
               <div>

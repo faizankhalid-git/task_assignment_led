@@ -1,11 +1,19 @@
-import { useState } from 'react';
-import { Plus, X, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, X, AlertTriangle, Package } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export interface PackageWithDeviation {
   sscc: string;
   hasDeviation: boolean;
   deviationNotes?: string;
 }
+
+type StoredPackage = {
+  sscc_number: string;
+  status: string;
+  storage_location: string;
+  created_at: string;
+};
 
 type PackageManagerProps = {
   packages: string[];
@@ -16,6 +24,7 @@ type PackageManagerProps = {
   enableDeviationTracking?: boolean;
   packagesWithDeviations?: PackageWithDeviation[];
   onDeviationChange?: (packages: PackageWithDeviation[]) => void;
+  shipmentType?: 'incoming' | 'outgoing' | 'general';
 };
 
 export function PackageManager({
@@ -26,9 +35,13 @@ export function PackageManager({
   compact = false,
   enableDeviationTracking = false,
   packagesWithDeviations = [],
-  onDeviationChange
+  onDeviationChange,
+  shipmentType = 'general'
 }: PackageManagerProps) {
   const [newPackage, setNewPackage] = useState('');
+  const [storedPackages, setStoredPackages] = useState<StoredPackage[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   const [deviationStates, setDeviationStates] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     packagesWithDeviations.forEach(pkg => {
@@ -45,6 +58,41 @@ export function PackageManager({
     });
     return initial;
   });
+
+  useEffect(() => {
+    if (shipmentType === 'outgoing') {
+      loadStoredPackages();
+    }
+  }, [shipmentType]);
+
+  const loadStoredPackages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('packages')
+        .select('sscc_number, status, storage_location, created_at')
+        .eq('status', 'stored')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setStoredPackages(data || []);
+    } catch (err) {
+      console.error('Failed to load stored packages:', err);
+    }
+  };
+
+  const addFromDropdown = (ssccNumber: string) => {
+    if (packages.includes(ssccNumber)) {
+      alert('This package is already added');
+      return;
+    }
+    onChange([...packages, ssccNumber]);
+    setShowDropdown(false);
+    setSearchTerm('');
+  };
+
+  const filteredStoredPackages = storedPackages.filter(pkg =>
+    pkg.sscc_number.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const addPackage = () => {
     const trimmed = newPackage.trim();
@@ -126,13 +174,77 @@ export function PackageManager({
         </label>
       )}
 
+      {shipmentType === 'outgoing' && storedPackages.length > 0 && (
+        <div className="mb-3 relative">
+          <button
+            type="button"
+            onClick={() => setShowDropdown(!showDropdown)}
+            disabled={disabled}
+            className="w-full px-3 py-2 bg-green-50 border-2 border-green-200 rounded-lg hover:bg-green-100 disabled:bg-slate-100 flex items-center justify-between font-medium text-green-700 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Package className="w-4 h-4" />
+              Select from {storedPackages.length} stored packages
+            </span>
+            <span className="text-xs bg-green-100 px-2 py-1 rounded">
+              {storedPackages.length} available
+            </span>
+          </button>
+
+          {showDropdown && (
+            <div className="absolute z-10 w-full mt-1 bg-white border-2 border-green-200 rounded-lg shadow-lg max-h-80 overflow-hidden">
+              <div className="p-2 border-b border-green-100">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search packages..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
+                />
+              </div>
+              <div className="overflow-y-auto max-h-64">
+                {filteredStoredPackages.length > 0 ? (
+                  filteredStoredPackages.map((pkg) => (
+                    <button
+                      key={pkg.sscc_number}
+                      type="button"
+                      onClick={() => addFromDropdown(pkg.sscc_number)}
+                      disabled={packages.includes(pkg.sscc_number)}
+                      className={`w-full px-3 py-2 text-left hover:bg-green-50 border-b border-slate-100 transition-colors ${
+                        packages.includes(pkg.sscc_number) ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-slate-900">{pkg.sscc_number}</span>
+                        {packages.includes(pkg.sscc_number) && (
+                          <span className="text-xs text-slate-500">Already added</span>
+                        )}
+                      </div>
+                      {pkg.storage_location && (
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Location: {pkg.storage_location}
+                        </div>
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-4 text-center text-slate-500 text-sm">
+                    No packages found
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className={`flex gap-2 ${compact ? 'mb-2' : 'mb-3'}`}>
         <input
           type="text"
           value={newPackage}
           onChange={(e) => setNewPackage(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="Enter SSCC number (e.g., HU6827)"
+          placeholder={shipmentType === 'outgoing' ? 'Or enter SSCC manually' : 'Enter SSCC number (e.g., HU6827)'}
           disabled={disabled}
           className={`flex-1 ${compact ? 'px-2 py-1.5 text-sm' : 'px-3 py-2'} border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100`}
         />
