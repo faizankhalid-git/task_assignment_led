@@ -17,7 +17,7 @@ type PackageReport = {
 export function WarehouseReportTab() {
   const [packages, setPackages] = useState<PackageReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'current' | 'completed'>('current');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'current' | 'completed'>('all');
   const [sortBy, setSortBy] = useState<'duration' | 'arrival'>('duration');
 
   useEffect(() => {
@@ -32,35 +32,40 @@ export function WarehouseReportTab() {
           sscc_number,
           status,
           created_at,
-          completed_at,
           shipments!inner(
             title,
             shipment_type,
-            start
+            start,
+            completed_at,
+            status
           )
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const report: PackageReport[] = data.map((pkg: any) => {
+      const report: PackageReport[] = (data || []).map((pkg: any) => {
         const arrivedAt = new Date(pkg.created_at);
-        const completedAt = pkg.completed_at ? new Date(pkg.completed_at) : null;
-        const endTime = completedAt || new Date();
+        const shipmentCompleted = pkg.shipments?.completed_at ? new Date(pkg.shipments.completed_at) : null;
+        const endTime = shipmentCompleted || new Date();
         const durationMs = endTime.getTime() - arrivedAt.getTime();
         const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
         const durationDays = Math.floor(durationHours / 24);
 
+        const isStillInWarehouse = pkg.shipments?.status !== 'completed' &&
+                                   pkg.status !== 'completed' &&
+                                   pkg.status !== 'cancelled';
+
         return {
           sscc_number: pkg.sscc_number,
           shipment_title: pkg.shipments.title,
-          shipment_type: pkg.shipments.shipment_type,
+          shipment_type: pkg.shipments.shipment_type || 'general',
           status: pkg.status,
           arrived_at: pkg.created_at,
-          completed_at: pkg.completed_at,
+          completed_at: pkg.shipments?.completed_at || null,
           duration_hours: durationHours,
           duration_days: durationDays,
-          is_still_in_warehouse: pkg.status !== 'completed' && pkg.status !== 'cancelled'
+          is_still_in_warehouse: isStillInWarehouse
         };
       });
 
