@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
-import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, CreditCard as Edit2, X, Search, Zap } from 'lucide-react';
+import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, CreditCard as Edit2, X, Search, Zap, ArrowDown, Truck } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
 import { notificationService } from '../services/notificationService';
@@ -43,6 +43,7 @@ export function ShipmentsTab() {
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedType, setSelectedType] = useState<string>('all');
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showNewShipment, setShowNewShipment] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -51,6 +52,7 @@ export function ShipmentsTab() {
   const [packagesList, setPackagesList] = useState<string[]>([]);
   const [editingPackagesList, setEditingPackagesList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [shipmentType, setShipmentType] = useState<'incoming' | 'outgoing'>('outgoing');
   const [isDelivery, setIsDelivery] = useState(true);
   const [intensity, setIntensity] = useState<IntensityLevel>('medium');
   const [editingIntensity, setEditingIntensity] = useState<IntensityLevel>('medium');
@@ -86,7 +88,7 @@ export function ShipmentsTab() {
   useEffect(() => {
     filterShipments();
     loadOperatorAssignments();
-  }, [selectedDate, selectedStatus, allShipments]);
+  }, [selectedDate, selectedStatus, selectedType, allShipments]);
 
   const getDateRangeForFilter = (filter: string) => {
     const today = new Date();
@@ -148,6 +150,10 @@ export function ShipmentsTab() {
 
     if (selectedStatus !== 'all') {
       filtered = filtered.filter(s => s.status === selectedStatus);
+    }
+
+    if (selectedType !== 'all') {
+      filtered = filtered.filter(s => s.shipment_type === selectedType);
     }
 
     if (searchQuery.trim()) {
@@ -377,6 +383,18 @@ export function ShipmentsTab() {
     }
   };
 
+  const getShipmentTypeIcon = (type: 'incoming' | 'outgoing') => {
+    return type === 'incoming'
+      ? <ArrowDown className="w-4 h-4 text-blue-600" />
+      : <Truck className="w-4 h-4 text-green-600" />;
+  };
+
+  const getShipmentTypeBadge = (type: 'incoming' | 'outgoing') => {
+    return type === 'incoming'
+      ? <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">INCOMING</span>
+      : <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">OUTGOING</span>
+  };
+
   const exportToCSV = (data: Shipment[], filename: string) => {
     const headers = ['Title', 'SSCC Numbers', 'Arrival Time', 'Vehicle Reg', 'Operators', 'Status', 'Storage Location', 'Notes'];
 
@@ -505,6 +523,7 @@ export function ShipmentsTab() {
       start: formData.get('start') as string,
       car_reg_no: formData.get('car_reg_no') as string,
       status: 'pending',
+      shipment_type: shipmentType,
       archived: false,
       intensity: intensity,
       assigned_operators: selectedOperators,
@@ -566,6 +585,7 @@ export function ShipmentsTab() {
       setSelectedOperators([]);
       setOperatorSearch('');
       setPackagesList([]);
+      setShipmentType('outgoing');
       setIsDelivery(true);
       setIntensity('medium');
       setShowNewShipment(false);
@@ -915,17 +935,49 @@ export function ShipmentsTab() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
-                <input
-                  type="checkbox"
-                  id="is_delivery"
-                  checked={isDelivery}
-                  onChange={(e) => setIsDelivery(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="is_delivery" className="text-sm font-medium text-slate-700 cursor-pointer">
-                  This is a delivery (show vehicle icon on LED display)
-                </label>
+              <div className="p-3 bg-slate-50 rounded-lg space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Task Type</label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="shipment_type"
+                        value="incoming"
+                        checked={shipmentType === 'incoming'}
+                        onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing')}
+                        className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                      />
+                      <ArrowDown className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium text-slate-700">Incoming</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="shipment_type"
+                        value="outgoing"
+                        checked={shipmentType === 'outgoing'}
+                        onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing')}
+                        className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
+                      />
+                      <Truck className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-slate-700">Outgoing</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_delivery"
+                    checked={isDelivery}
+                    onChange={(e) => setIsDelivery(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="is_delivery" className="text-sm text-slate-600 cursor-pointer">
+                    Show vehicle icon on LED display
+                  </label>
+                </div>
               </div>
 
               <PackageManager
@@ -1116,6 +1168,44 @@ export function ShipmentsTab() {
           </div>
 
           <div>
+            <label className="block text-xs font-medium text-slate-700 mb-2">Filter by Type</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedType('all')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                  selectedType === 'all'
+                    ? 'bg-slate-600 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setSelectedType('incoming')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
+                  selectedType === 'incoming'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                <ArrowDown className="w-4 h-4" />
+                Incoming
+              </button>
+              <button
+                onClick={() => setSelectedType('outgoing')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
+                  selectedType === 'outgoing'
+                    ? 'bg-green-500 text-white'
+                    : 'bg-green-50 text-green-700 hover:bg-green-100'
+                }`}
+              >
+                <Truck className="w-4 h-4" />
+                Outgoing
+              </button>
+            </div>
+          </div>
+
+          <div>
             <label className="block text-xs font-medium text-slate-700 mb-2">Filter by Status</label>
             <div className="flex gap-2">
               <button
@@ -1181,6 +1271,7 @@ export function ShipmentsTab() {
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Type</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Title</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">SSCC/Packages</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Arrival</th>
@@ -1193,7 +1284,7 @@ export function ShipmentsTab() {
           <tbody className="divide-y divide-slate-200">
             {shipments.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                   {searchQuery ? 'No shipments found matching your search' : 'No shipments found. Click "Sync with Sheet" to import data.'}
                 </td>
               </tr>
@@ -1202,7 +1293,7 @@ export function ShipmentsTab() {
                 <tr key={shipment.id} className={editingId === shipment.id ? 'bg-blue-50' : 'hover:bg-slate-50'}>
                   {editingId === shipment.id ? (
                     <>
-                      <td colSpan={7} className="px-4 py-3">
+                      <td colSpan={8} className="px-4 py-3">
                         <form onSubmit={(e) => updateShipment(shipment.id, e)} className="space-y-3">
                           <div className="grid grid-cols-3 gap-2">
                             <input
@@ -1342,6 +1433,12 @@ export function ShipmentsTab() {
                     </>
                   ) : (
                     <>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          {getShipmentTypeIcon(shipment.shipment_type)}
+                          {getShipmentTypeBadge(shipment.shipment_type)}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <div
                           className="flex items-center gap-2 cursor-help"
