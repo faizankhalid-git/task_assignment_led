@@ -24,7 +24,7 @@ export function BackupRestoreTab() {
         .from('shipments')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100000);
+        .range(0, 100000);
 
       if (shipmentsError) throw shipmentsError;
 
@@ -33,7 +33,7 @@ export function BackupRestoreTab() {
         .from('operators')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100000);
+        .range(0, 100000);
 
       if (operatorsError) throw operatorsError;
 
@@ -42,7 +42,7 @@ export function BackupRestoreTab() {
         .from('packages')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100000);
+        .range(0, 100000);
 
       if (packagesError) throw packagesError;
 
@@ -50,7 +50,7 @@ export function BackupRestoreTab() {
       const { data: userProfiles, error: profilesError } = await supabase
         .from('user_profiles')
         .select('*')
-        .limit(100000);
+        .range(0, 100000);
 
       if (profilesError) throw profilesError;
 
@@ -58,7 +58,7 @@ export function BackupRestoreTab() {
       const { data: notificationSettings, error: notifError } = await supabase
         .from('notification_settings')
         .select('*')
-        .limit(100000);
+        .range(0, 100000);
 
       if (notifError) throw notifError;
 
@@ -224,7 +224,7 @@ export function BackupRestoreTab() {
         .from('shipments_with_users')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(100000);
+        .range(0, 100000);
 
       if (error) throw error;
       if (!shipments || shipments.length === 0) {

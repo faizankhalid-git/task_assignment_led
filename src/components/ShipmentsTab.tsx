@@ -169,12 +169,12 @@ export function ShipmentsTab() {
 
   const loadShipments = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('shipments_with_users')
-        .select('*', { count: 'exact' })
+        .select('*', { count: 'exact', head: false })
         .eq('archived', false)
         .order('start', { ascending: true })
-        .limit(10000);
+        .range(0, 50000);
 
       if (error) {
         console.error('Error loading shipments:', error);
