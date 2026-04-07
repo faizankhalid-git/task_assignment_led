@@ -169,23 +169,39 @@ export function ShipmentsTab() {
 
   const loadShipments = async () => {
     try {
-      const { data, error, count } = await supabase
-        .from('shipments_with_users')
-        .select('*', { count: 'exact', head: false })
-        .eq('archived', false)
-        .order('start', { ascending: true })
-        .range(0, 50000);
+      let allData: any[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (error) {
-        console.error('Error loading shipments:', error);
-        setLoading(false);
-        return;
+      while (hasMore) {
+        const { data, error, count } = await supabase
+          .from('shipments_with_users')
+          .select('*', { count: 'exact', head: false })
+          .eq('archived', false)
+          .order('start', { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          console.error('Error loading shipments:', error);
+          setLoading(false);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          from += pageSize;
+          hasMore = data.length === pageSize;
+          console.log(`[ShipmentsTab] Loaded batch: ${data.length} rows, total so far: ${allData.length}, count from DB: ${count}`);
+        } else {
+          hasMore = false;
+        }
       }
 
-      if (data) {
-        console.log(`[ShipmentsTab] Loaded ${data.length} shipments from database (count: ${count})`);
-        setAllShipments(data);
-        let filtered = data;
+      if (allData.length > 0) {
+        console.log(`[ShipmentsTab] Finished loading ${allData.length} total shipments`);
+        setAllShipments(allData);
+        let filtered = allData;
 
         const dateRange = getDateRangeForFilter(selectedDate);
         if (dateRange) {
