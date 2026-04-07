@@ -31,8 +31,7 @@ export type Shipment = {
   storage_location: string;
   assigned_operators: string[];
   notes: string;
-  status: 'expected' | 'ready_to_deliver' | 'completed' | 'delivered';
-  shipment_type: 'incoming' | 'outgoing';
+  status: 'pending' | 'in_progress' | 'completed';
   intensity: 'low' | 'medium' | 'high';
   updated_at: string;
   archived: boolean;
@@ -68,7 +67,7 @@ export type Package = {
   shipment_id: string;
   sscc_number: string;
   storage_location: string;
-  status: 'expected' | 'ready_to_deliver' | 'stored' | 'completed' | 'delivered';
+  status: 'pending' | 'stored' | 'completed';
   created_at: string;
   updated_at: string;
 };

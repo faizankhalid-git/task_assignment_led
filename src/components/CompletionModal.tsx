@@ -118,10 +118,7 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
       return;
     }
 
-    const isIncoming = shipment.shipment_type === 'incoming';
-    const isOutgoing = shipment.shipment_type === 'outgoing';
-
-    if (isIncoming && packages.length > 0) {
+    if (packages.length > 0) {
       const missingLocations = packages.filter(pkg => !packageLocations[pkg.id]?.trim());
       if (missingLocations.length > 0) {
         setError(`Please specify storage location for all packages (${missingLocations.length} missing)`);
@@ -141,46 +138,23 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
       const { data: { user } } = await supabase.auth.getUser();
       const completedAt = new Date().toISOString();
 
-      let nextStatus: 'completed' | 'delivered' = 'completed';
-      let packageStatus: 'stored' | 'completed' | 'delivered' = 'stored';
-
-      if (isIncoming) {
-        nextStatus = 'completed';
-        packageStatus = 'stored';
-      } else if (isOutgoing) {
-        if (shipment.status === 'ready_to_deliver') {
-          nextStatus = 'completed';
-          packageStatus = 'completed';
-        } else if (shipment.status === 'completed') {
-          nextStatus = 'delivered';
-          packageStatus = 'delivered';
-        }
-      }
-
       for (const pkg of packages) {
         const hasDeviation = packageDeviations[pkg.id] || false;
-        const updateData: any = {
-          status: packageStatus,
-          has_deviation: hasDeviation,
-          updated_at: completedAt
-        };
-
-        if (isIncoming) {
-          updateData.storage_location = packageLocations[pkg.id].trim();
-        }
-
         const { error: pkgError } = await supabase
           .from('packages')
-          .update(updateData)
+          .update({
+            storage_location: packageLocations[pkg.id].trim(),
+            status: 'stored',
+            has_deviation: hasDeviation,
+            updated_at: completedAt
+          })
           .eq('id', pkg.id);
 
         if (pkgError) throw pkgError;
 
         if (hasDeviation) {
           const userNote = packageDeviationNotes[pkg.id] || '';
-          const defaultDescription = isIncoming
-            ? `Package ${pkg.sscc_number} flagged with issue during receiving. Location: ${packageLocations[pkg.id].trim()}`
-            : `Package ${pkg.sscc_number} flagged with issue during ${shipment.status === 'ready_to_deliver' ? 'loading' : 'delivery'}.`;
+          const defaultDescription = `Package ${pkg.sscc_number} flagged with issue during completion. Location: ${packageLocations[pkg.id].trim()}`;
           const fullDescription = userNote
             ? `${userNote}\n\nDetails: ${defaultDescription}`
             : defaultDescription;
@@ -196,9 +170,9 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
       }
 
       const allPackageNumbers = packages.map(p => p.sscc_number);
-      const allLocations = isIncoming && packages.length > 0
+      const allLocations = packages.length > 0
         ? packages.map(pkg => `${pkg.sscc_number}: ${packageLocations[pkg.id]}`).join('; ')
-        : shipment.storage_location || '';
+        : '';
 
       const { error: updateError } = await supabase
         .from('shipments')
@@ -207,7 +181,7 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
           storage_location: allLocations,
           assigned_operators: selectedOperators,
           notes: notes.trim(),
-          status: nextStatus,
+          status: 'completed',
           updated_at: completedAt,
           completed_by: user?.id,
           completed_at: completedAt
@@ -308,30 +282,11 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
     }
   };
 
-  const isIncoming = shipment.shipment_type === 'incoming';
-  const isOutgoing = shipment.shipment_type === 'outgoing';
-  const isReadyToDeliver = isOutgoing && shipment.status === 'ready_to_deliver';
-  const isCompleted = isOutgoing && shipment.status === 'completed';
-
-  const getModalTitle = () => {
-    if (isIncoming) return 'Complete Receiving';
-    if (isReadyToDeliver) return 'Complete Loading';
-    if (isCompleted) return 'Confirm Delivery';
-    return 'Complete Shipment';
-  };
-
-  const getButtonText = () => {
-    if (isIncoming) return 'Mark as Received';
-    if (isReadyToDeliver) return 'Mark as Loaded';
-    if (isCompleted) return 'Mark as Delivered';
-    return 'Complete';
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">{getModalTitle()}</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Complete Task</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600"
@@ -371,11 +326,10 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
             </div>
           </div>
 
-          {isIncoming && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Packages Storage Locations <span className="text-red-600">*</span>
-              </label>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Packages Storage Locations <span className="text-red-600">*</span>
+            </label>
             {loadingPackages ? (
               <div className="text-sm text-slate-500 py-4 text-center">Loading packages...</div>
             ) : packages.length === 0 ? (
@@ -449,8 +403,7 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
                 })}
               </div>
             )}
-            </div>
-          )}
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -539,12 +492,10 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
           <button
             onClick={handleComplete}
             disabled={saving || loadingPackages}
-            className={`px-4 py-2 text-white rounded-lg disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2 ${
-              isCompleted ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'
-            }`}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-            {getButtonText()}
+            Complete Task
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
-import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, CreditCard as Edit2, X, Search, Zap, ArrowDown, ArrowUp, Truck } from 'lucide-react';
+import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, CreditCard as Edit2, X, Search, Zap } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
 import { notificationService } from '../services/notificationService';
@@ -43,7 +43,6 @@ export function ShipmentsTab() {
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [selectedType, setSelectedType] = useState<string>('all');
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showNewShipment, setShowNewShipment] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,7 +51,7 @@ export function ShipmentsTab() {
   const [packagesList, setPackagesList] = useState<string[]>([]);
   const [editingPackagesList, setEditingPackagesList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [shipmentType, setShipmentType] = useState<'incoming' | 'outgoing'>('outgoing');
+  const [isDelivery, setIsDelivery] = useState(true);
   const [intensity, setIntensity] = useState<IntensityLevel>('medium');
   const [editingIntensity, setEditingIntensity] = useState<IntensityLevel>('medium');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -87,7 +86,7 @@ export function ShipmentsTab() {
   useEffect(() => {
     filterShipments();
     loadOperatorAssignments();
-  }, [selectedDate, selectedStatus, selectedType, allShipments]);
+  }, [selectedDate, selectedStatus, allShipments]);
 
   const getDateRangeForFilter = (filter: string) => {
     const today = new Date();
@@ -149,10 +148,6 @@ export function ShipmentsTab() {
 
     if (selectedStatus !== 'all') {
       filtered = filtered.filter(s => s.status === selectedStatus);
-    }
-
-    if (selectedType !== 'all') {
-      filtered = filtered.filter(s => s.shipment_type === selectedType);
     }
 
     if (searchQuery.trim()) {
@@ -309,8 +304,8 @@ export function ShipmentsTab() {
   };
 
 
-  const updateStatus = async (id: string, status: 'expected' | 'ready_to_deliver' | 'completed' | 'delivered') => {
-    if (status === 'completed' || status === 'delivered') {
+  const updateStatus = async (id: string, status: 'pending' | 'in_progress' | 'completed') => {
+    if (status === 'completed') {
       const shipment = shipments.find(s => s.id === id);
       if (shipment) {
         setSelectedShipment(shipment);
@@ -375,34 +370,11 @@ export function ShipmentsTab() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'expected': return 'bg-amber-100 text-amber-800';
-      case 'ready_to_deliver': return 'bg-blue-100 text-blue-800';
+      case 'pending': return 'bg-amber-100 text-amber-800';
+      case 'in_progress': return 'bg-blue-100 text-blue-800';
       case 'completed': return 'bg-green-100 text-green-800';
-      case 'delivered': return 'bg-emerald-100 text-emerald-800';
       default: return 'bg-slate-100 text-slate-800';
     }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'expected': return 'Expected';
-      case 'ready_to_deliver': return 'Ready to Deliver';
-      case 'completed': return 'Completed';
-      case 'delivered': return 'Delivered';
-      default: return status;
-    }
-  };
-
-  const getShipmentTypeIcon = (type: 'incoming' | 'outgoing') => {
-    return type === 'incoming'
-      ? <ArrowDown className="w-4 h-4 text-blue-600" />
-      : <Truck className="w-4 h-4 text-green-600" />;
-  };
-
-  const getShipmentTypeBadge = (type: 'incoming' | 'outgoing') => {
-    return type === 'incoming'
-      ? <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">INCOMING</span>
-      : <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">OUTGOING</span>;
   };
 
   const exportToCSV = (data: Shipment[], filename: string) => {
@@ -526,22 +498,19 @@ export function ShipmentsTab() {
 
     const { data: { user } } = await supabase.auth.getUser();
 
-    const initialStatus = shipmentType === 'incoming' ? 'expected' : 'ready_to_deliver';
-
     const newShipment = {
       row_id: Math.floor(Math.random() * 1000000),
       title: formData.get('title') as string,
       sscc_numbers: packagesList.length > 0 ? packagesList.join(', ') : '',
       start: formData.get('start') as string,
       car_reg_no: formData.get('car_reg_no') as string,
-      status: initialStatus,
-      shipment_type: shipmentType,
+      status: 'pending',
       archived: false,
       intensity: intensity,
       assigned_operators: selectedOperators,
       storage_location: '',
       notes: '',
-      is_delivery: shipmentType === 'outgoing',
+      is_delivery: isDelivery,
       created_by: user?.id
     };
 
@@ -597,11 +566,11 @@ export function ShipmentsTab() {
       setSelectedOperators([]);
       setOperatorSearch('');
       setPackagesList([]);
-      setShipmentType('outgoing');
+      setIsDelivery(true);
       setIntensity('medium');
       setShowNewShipment(false);
       loadShipments();
-      alert('Delivery created successfully!');
+      alert('Task created successfully!');
     } catch (err) {
       console.error('Failed to create shipment:', err);
       alert('Failed to create delivery: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -946,34 +915,17 @@ export function ShipmentsTab() {
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-lg">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Shipment Type</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="shipment_type"
-                      value="incoming"
-                      checked={shipmentType === 'incoming'}
-                      onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing')}
-                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
-                    />
-                    <ArrowDown className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-medium text-slate-700">INCOMING (Receiving at warehouse)</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="shipment_type"
-                      value="outgoing"
-                      checked={shipmentType === 'outgoing'}
-                      onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing')}
-                      className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
-                    />
-                    <Truck className="w-4 h-4 text-green-600" />
-                    <span className="text-sm font-medium text-slate-700">OUTGOING (Delivery to site)</span>
-                  </label>
-                </div>
+              <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="is_delivery"
+                  checked={isDelivery}
+                  onChange={(e) => setIsDelivery(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="is_delivery" className="text-sm font-medium text-slate-700 cursor-pointer">
+                  This is a delivery (show vehicle icon on LED display)
+                </label>
               </div>
 
               <PackageManager
@@ -1164,46 +1116,8 @@ export function ShipmentsTab() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-2">Filter by Type</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setSelectedType('all')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                  selectedType === 'all'
-                    ? 'bg-slate-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setSelectedType('incoming')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
-                  selectedType === 'incoming'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                }`}
-              >
-                <ArrowDown className="w-4 h-4" />
-                Incoming
-              </button>
-              <button
-                onClick={() => setSelectedType('outgoing')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
-                  selectedType === 'outgoing'
-                    ? 'bg-green-500 text-white'
-                    : 'bg-green-50 text-green-700 hover:bg-green-100'
-                }`}
-              >
-                <Truck className="w-4 h-4" />
-                Outgoing
-              </button>
-            </div>
-          </div>
-
-          <div>
             <label className="block text-xs font-medium text-slate-700 mb-2">Filter by Status</label>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2">
               <button
                 onClick={() => setSelectedStatus('all')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
@@ -1215,24 +1129,24 @@ export function ShipmentsTab() {
                 All
               </button>
               <button
-                onClick={() => setSelectedStatus('expected')}
+                onClick={() => setSelectedStatus('pending')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                  selectedStatus === 'expected'
+                  selectedStatus === 'pending'
                     ? 'bg-amber-500 text-white'
                     : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
                 }`}
               >
-                Expected
+                Pending
               </button>
               <button
-                onClick={() => setSelectedStatus('ready_to_deliver')}
+                onClick={() => setSelectedStatus('in_progress')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                  selectedStatus === 'ready_to_deliver'
+                  selectedStatus === 'in_progress'
                     ? 'bg-blue-500 text-white'
                     : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                 }`}
               >
-                Ready to Deliver
+                In Progress
               </button>
               <button
                 onClick={() => setSelectedStatus('completed')}
@@ -1243,16 +1157,6 @@ export function ShipmentsTab() {
                 }`}
               >
                 Completed
-              </button>
-              <button
-                onClick={() => setSelectedStatus('delivered')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                  selectedStatus === 'delivered'
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                }`}
-              >
-                Delivered
               </button>
             </div>
           </div>
@@ -1277,10 +1181,9 @@ export function ShipmentsTab() {
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Type</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Title</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">SSCC/Packages</th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Date/Time</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Arrival</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Car Reg</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Operators</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-700">Status</th>
@@ -1290,7 +1193,7 @@ export function ShipmentsTab() {
           <tbody className="divide-y divide-slate-200">
             {shipments.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                   {searchQuery ? 'No shipments found matching your search' : 'No shipments found. Click "Sync with Sheet" to import data.'}
                 </td>
               </tr>
@@ -1299,7 +1202,7 @@ export function ShipmentsTab() {
                 <tr key={shipment.id} className={editingId === shipment.id ? 'bg-blue-50' : 'hover:bg-slate-50'}>
                   {editingId === shipment.id ? (
                     <>
-                      <td colSpan={8} className="px-4 py-3">
+                      <td colSpan={7} className="px-4 py-3">
                         <form onSubmit={(e) => updateShipment(shipment.id, e)} className="space-y-3">
                           <div className="grid grid-cols-3 gap-2">
                             <input
@@ -1440,12 +1343,6 @@ export function ShipmentsTab() {
                   ) : (
                     <>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {getShipmentTypeIcon(shipment.shipment_type)}
-                          {getShipmentTypeBadge(shipment.shipment_type)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
                         <div
                           className="flex items-center gap-2 cursor-help"
                           title={getActivityTooltip(shipment)}
@@ -1481,34 +1378,27 @@ export function ShipmentsTab() {
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(shipment.status)}`}>
-                          {(shipment.status === 'completed' || shipment.status === 'delivered') && <CheckCircle2 className="w-3 h-3" />}
-                          {getStatusLabel(shipment.status)}
+                          {shipment.status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
+                          {shipment.status === 'in_progress' && <Clock className="w-3 h-3" />}
+                          {shipment.status.replace('_', ' ')}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex justify-end gap-2">
-                          {shipment.shipment_type === 'incoming' && shipment.status === 'expected' && (
+                          {shipment.status === 'pending' && (
+                            <button
+                              onClick={() => updateStatus(shipment.id, 'in_progress')}
+                              className="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded"
+                            >
+                              Start
+                            </button>
+                          )}
+                          {shipment.status !== 'completed' && (
                             <button
                               onClick={() => updateStatus(shipment.id, 'completed')}
                               className="px-3 py-1 text-sm text-green-600 hover:bg-green-50 rounded"
                             >
                               Complete
-                            </button>
-                          )}
-                          {shipment.shipment_type === 'outgoing' && shipment.status === 'ready_to_deliver' && (
-                            <button
-                              onClick={() => updateStatus(shipment.id, 'completed')}
-                              className="px-3 py-1 text-sm text-green-600 hover:bg-green-50 rounded"
-                            >
-                              Complete
-                            </button>
-                          )}
-                          {shipment.shipment_type === 'outgoing' && shipment.status === 'completed' && (
-                            <button
-                              onClick={() => updateStatus(shipment.id, 'delivered')}
-                              className="px-3 py-1 text-sm text-emerald-600 hover:bg-emerald-50 rounded"
-                            >
-                              Deliver
                             </button>
                           )}
                           <button
@@ -1519,7 +1409,7 @@ export function ShipmentsTab() {
                               await loadPackagesForShipment(shipment.id);
                             }}
                             className="px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded"
-                            title="Edit delivery"
+                            title="Edit task"
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
@@ -1527,7 +1417,7 @@ export function ShipmentsTab() {
                             onClick={() => deleteShipment(shipment.id)}
                             disabled={deleting === shipment.id}
                             className="px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Delete delivery"
+                            title="Delete task"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
