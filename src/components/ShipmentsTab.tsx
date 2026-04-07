@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
-import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, CreditCard as Edit2, X, Search, Zap, ArrowDown, Truck, ClipboardList } from 'lucide-react';
+import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Pencil, X, Search, Zap, ArrowDown, Truck, ClipboardList } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
 import { notificationService } from '../services/notificationService';
@@ -53,7 +53,6 @@ export function ShipmentsTab() {
   const [editingPackagesList, setEditingPackagesList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [shipmentType, setShipmentType] = useState<'incoming' | 'outgoing' | 'general'>('general');
-  const [isDelivery, setIsDelivery] = useState(true);
   const [intensity, setIntensity] = useState<IntensityLevel>('medium');
   const [editingIntensity, setEditingIntensity] = useState<IntensityLevel>('medium');
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -533,7 +532,7 @@ export function ShipmentsTab() {
       assigned_operators: selectedOperators,
       storage_location: '',
       notes: '',
-      is_delivery: isDelivery,
+      is_delivery: shipmentType === 'incoming' || shipmentType === 'outgoing',
       created_by: user?.id
     };
 
@@ -590,7 +589,6 @@ export function ShipmentsTab() {
       setOperatorSearch('');
       setPackagesList([]);
       setShipmentType('general');
-      setIsDelivery(true);
       setIntensity('medium');
       setShowNewShipment(false);
       loadShipments();
@@ -981,19 +979,6 @@ export function ShipmentsTab() {
                     </label>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="is_delivery"
-                    checked={isDelivery}
-                    onChange={(e) => setIsDelivery(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor="is_delivery" className="text-sm text-slate-600 cursor-pointer">
-                    Show vehicle icon on LED display
-                  </label>
-                </div>
               </div>
 
               <PackageManager
@@ -1181,55 +1166,6 @@ export function ShipmentsTab() {
                 <X className="w-5 h-5" />
               </button>
             )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-2">Filter by Type</label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setSelectedType('all')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                  selectedType === 'all'
-                    ? 'bg-slate-600 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                All
-              </button>
-              <button
-                onClick={() => setSelectedType('incoming')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
-                  selectedType === 'incoming'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                }`}
-              >
-                <ArrowDown className="w-4 h-4" />
-                Incoming
-              </button>
-              <button
-                onClick={() => setSelectedType('outgoing')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
-                  selectedType === 'outgoing'
-                    ? 'bg-green-500 text-white'
-                    : 'bg-green-50 text-green-700 hover:bg-green-100'
-                }`}
-              >
-                <Truck className="w-4 h-4" />
-                Outgoing
-              </button>
-              <button
-                onClick={() => setSelectedType('general')}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
-                  selectedType === 'general'
-                    ? 'bg-slate-500 text-white'
-                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <ClipboardList className="w-4 h-4" />
-                General
-              </button>
-            </div>
           </div>
 
           <div>
@@ -1535,7 +1471,7 @@ export function ShipmentsTab() {
                             className="px-3 py-1 text-sm text-slate-600 hover:bg-slate-100 rounded"
                             title="Edit task"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => deleteShipment(shipment.id)}
