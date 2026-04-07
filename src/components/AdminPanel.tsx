@@ -13,13 +13,14 @@ import { KPIDashboard } from './KPIDashboard';
 import { DeviationsTab } from './DeviationsTab';
 import { PackageSearch } from './PackageSearch';
 import { PackageDetailsModal } from './PackageDetailsModal';
+import { WarehouseReportTab } from './WarehouseReportTab';
 import {
   Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell,
   Volume2, Radio, Database, History, TrendingUp, ChevronDown,
-  BarChart3, MessageSquare, Cog, AlertTriangle, Search, X, type LucideIcon
+  BarChart3, MessageSquare, Cog, AlertTriangle, Search, X, Warehouse, type LucideIcon
 } from 'lucide-react';
 
-type Tab = 'shipments' | 'packages' | 'deviations' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'settings' | 'users' | 'backup';
+type Tab = 'shipments' | 'packages' | 'deviations' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'warehouse' | 'settings' | 'users' | 'backup';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -174,6 +175,13 @@ export function AdminPanel() {
           icon: TrendingUp,
           permission: 'kpi',
           description: 'View performance metrics (Super Admin only)'
+        },
+        {
+          id: 'warehouse',
+          label: 'Warehouse Report',
+          icon: Warehouse,
+          permission: 'shipments',
+          description: 'Track package warehouse duration'
         },
       ]
     },
@@ -464,6 +472,7 @@ export function AdminPanel() {
               {activeTab === 'deviations' && hasPermission('shipments') && <DeviationsTab />}
               {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
               {activeTab === 'kpi' && hasPermission('kpi') && <KPIDashboard />}
+              {activeTab === 'warehouse' && hasPermission('shipments') && <WarehouseReportTab />}
               {activeTab === 'announcements' && hasPermission('announcements') && <AnnouncementsTab />}
               {activeTab === 'live_audio' && hasPermission('live_audio') && <LiveAudioTab />}
               {activeTab === 'notifications' && hasPermission('notifications') && <NotificationsTab />}
