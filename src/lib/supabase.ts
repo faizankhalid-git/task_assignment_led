@@ -32,7 +32,7 @@ export type Shipment = {
   assigned_operators: string[];
   notes: string;
   status: 'pending' | 'in_progress' | 'completed';
-  shipment_type: 'incoming' | 'outgoing';
+  shipment_type: 'incoming' | 'outgoing' | 'general';
   intensity: 'low' | 'medium' | 'high';
   updated_at: string;
   archived: boolean;

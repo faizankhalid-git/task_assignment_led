@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
-import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, CreditCard as Edit2, X, Search, Zap, ArrowDown, Truck } from 'lucide-react';
+import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, CreditCard as Edit2, X, Search, Zap, ArrowDown, Truck, ClipboardList } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
 import { notificationService } from '../services/notificationService';
@@ -52,7 +52,7 @@ export function ShipmentsTab() {
   const [packagesList, setPackagesList] = useState<string[]>([]);
   const [editingPackagesList, setEditingPackagesList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [shipmentType, setShipmentType] = useState<'incoming' | 'outgoing'>('outgoing');
+  const [shipmentType, setShipmentType] = useState<'incoming' | 'outgoing' | 'general'>('general');
   const [isDelivery, setIsDelivery] = useState(true);
   const [intensity, setIntensity] = useState<IntensityLevel>('medium');
   const [editingIntensity, setEditingIntensity] = useState<IntensityLevel>('medium');
@@ -383,16 +383,20 @@ export function ShipmentsTab() {
     }
   };
 
-  const getShipmentTypeIcon = (type: 'incoming' | 'outgoing') => {
-    return type === 'incoming'
-      ? <ArrowDown className="w-4 h-4 text-blue-600" />
-      : <Truck className="w-4 h-4 text-green-600" />;
+  const getShipmentTypeIcon = (type: 'incoming' | 'outgoing' | 'general') => {
+    if (type === 'incoming') return <ArrowDown className="w-4 h-4 text-blue-600" />;
+    if (type === 'outgoing') return <Truck className="w-4 h-4 text-green-600" />;
+    return <ClipboardList className="w-4 h-4 text-slate-600" />;
   };
 
-  const getShipmentTypeBadge = (type: 'incoming' | 'outgoing') => {
-    return type === 'incoming'
-      ? <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">INCOMING</span>
-      : <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">OUTGOING</span>
+  const getShipmentTypeBadge = (type: 'incoming' | 'outgoing' | 'general') => {
+    if (type === 'incoming') {
+      return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">INCOMING</span>;
+    }
+    if (type === 'outgoing') {
+      return <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">OUTGOING</span>;
+    }
+    return <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-medium">GENERAL</span>;
   };
 
   const exportToCSV = (data: Shipment[], filename: string) => {
@@ -585,7 +589,7 @@ export function ShipmentsTab() {
       setSelectedOperators([]);
       setOperatorSearch('');
       setPackagesList([]);
-      setShipmentType('outgoing');
+      setShipmentType('general');
       setIsDelivery(true);
       setIntensity('medium');
       setShowNewShipment(false);
@@ -938,14 +942,14 @@ export function ShipmentsTab() {
               <div className="p-3 bg-slate-50 rounded-lg space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Task Type</label>
-                  <div className="flex gap-4">
+                  <div className="flex flex-wrap gap-4">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
                         name="shipment_type"
                         value="incoming"
                         checked={shipmentType === 'incoming'}
-                        onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing')}
+                        onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing' | 'general')}
                         className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
                       />
                       <ArrowDown className="w-4 h-4 text-blue-600" />
@@ -957,11 +961,23 @@ export function ShipmentsTab() {
                         name="shipment_type"
                         value="outgoing"
                         checked={shipmentType === 'outgoing'}
-                        onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing')}
+                        onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing' | 'general')}
                         className="w-4 h-4 text-green-600 border-slate-300 focus:ring-green-500"
                       />
                       <Truck className="w-4 h-4 text-green-600" />
                       <span className="text-sm font-medium text-slate-700">Outgoing</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="shipment_type"
+                        value="general"
+                        checked={shipmentType === 'general'}
+                        onChange={(e) => setShipmentType(e.target.value as 'incoming' | 'outgoing' | 'general')}
+                        className="w-4 h-4 text-slate-600 border-slate-300 focus:ring-slate-500"
+                      />
+                      <ClipboardList className="w-4 h-4 text-slate-600" />
+                      <span className="text-sm font-medium text-slate-700">General Task</span>
                     </label>
                   </div>
                 </div>
@@ -1169,7 +1185,7 @@ export function ShipmentsTab() {
 
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-2">Filter by Type</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setSelectedType('all')}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
@@ -1201,6 +1217,17 @@ export function ShipmentsTab() {
               >
                 <Truck className="w-4 h-4" />
                 Outgoing
+              </button>
+              <button
+                onClick={() => setSelectedType('general')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
+                  selectedType === 'general'
+                    ? 'bg-slate-500 text-white'
+                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <ClipboardList className="w-4 h-4" />
+                General
               </button>
             </div>
           </div>

@@ -285,6 +285,7 @@ export function CompletionModal({ shipment, onClose, onComplete }: CompletionMod
   const getModalTitle = () => {
     if (shipment.shipment_type === 'incoming') return 'Complete Incoming Task';
     if (shipment.shipment_type === 'outgoing') return 'Complete Outgoing Task';
+    if (shipment.shipment_type === 'general') return 'Complete General Task';
     return 'Complete Task';
   };
 
