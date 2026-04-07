@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase, Shipment } from '../lib/supabase';
-import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, Edit2, X, Search, Zap } from 'lucide-react';
+import { Package, CheckCircle2, Clock, Info, Download, Trash2, Plus, CreditCard as Edit2, X, Search, Zap } from 'lucide-react';
 import { CompletionModal } from './CompletionModal';
 import { PackageManager } from './PackageManager';
 import { notificationService } from '../services/notificationService';
@@ -171,9 +171,10 @@ export function ShipmentsTab() {
     try {
       const { data, error } = await supabase
         .from('shipments_with_users')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('archived', false)
-        .order('start', { ascending: true });
+        .order('start', { ascending: true })
+        .limit(10000);
 
       if (error) {
         console.error('Error loading shipments:', error);

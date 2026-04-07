@@ -23,7 +23,8 @@ export function BackupRestoreTab() {
       const { data: shipments, error: shipmentsError } = await supabase
         .from('shipments')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100000);
 
       if (shipmentsError) throw shipmentsError;
 
@@ -31,7 +32,8 @@ export function BackupRestoreTab() {
       const { data: operators, error: operatorsError } = await supabase
         .from('operators')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100000);
 
       if (operatorsError) throw operatorsError;
 
@@ -39,21 +41,24 @@ export function BackupRestoreTab() {
       const { data: packages, error: packagesError } = await supabase
         .from('packages')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100000);
 
       if (packagesError) throw packagesError;
 
       setBackupStatus('Exporting user profiles...');
       const { data: userProfiles, error: profilesError } = await supabase
         .from('user_profiles')
-        .select('*');
+        .select('*')
+        .limit(100000);
 
       if (profilesError) throw profilesError;
 
       setBackupStatus('Exporting notifications...');
       const { data: notificationSettings, error: notifError } = await supabase
         .from('notification_settings')
-        .select('*');
+        .select('*')
+        .limit(100000);
 
       if (notifError) throw notifError;
 
@@ -218,7 +223,8 @@ export function BackupRestoreTab() {
       const { data: shipments, error } = await supabase
         .from('shipments_with_users')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100000);
 
       if (error) throw error;
       if (!shipments || shipments.length === 0) {
