@@ -183,6 +183,7 @@ export function ShipmentsTab() {
       }
 
       if (data) {
+        console.log(`[ShipmentsTab] Loaded ${data.length} shipments from database (count: ${count})`);
         setAllShipments(data);
         let filtered = data;
 
