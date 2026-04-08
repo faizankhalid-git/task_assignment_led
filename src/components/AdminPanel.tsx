@@ -14,13 +14,15 @@ import { DeviationsTab } from './DeviationsTab';
 import { PackageSearch } from './PackageSearch';
 import { PackageDetailsModal } from './PackageDetailsModal';
 import { WarehouseReportTab } from './WarehouseReportTab';
+import { BulkImportTab } from './BulkImportTab';
+import { PackageHistoryTab } from './PackageHistoryTab';
 import {
   Package, Users, Settings, LogOut, Monitor, Shield, UserCog, Bell,
   Volume2, Radio, Database, History, TrendingUp, ChevronDown,
-  BarChart3, MessageSquare, Cog, AlertTriangle, Search, X, Warehouse, type LucideIcon
+  BarChart3, MessageSquare, Cog, AlertTriangle, Search, X, Warehouse, Upload, Clock, type LucideIcon
 } from 'lucide-react';
 
-type Tab = 'shipments' | 'packages' | 'deviations' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'warehouse' | 'settings' | 'users' | 'backup';
+type Tab = 'shipments' | 'packages' | 'deviations' | 'operators' | 'announcements' | 'live_audio' | 'notifications' | 'audit' | 'kpi' | 'warehouse' | 'settings' | 'users' | 'backup' | 'bulk_import' | 'package_history';
 
 type UserProfile = {
   role: 'super_admin' | 'admin' | 'operator';
@@ -182,6 +184,20 @@ export function AdminPanel() {
           icon: Warehouse,
           permission: 'shipments',
           description: 'Track package warehouse duration'
+        },
+        {
+          id: 'package_history',
+          label: 'Package History',
+          icon: Clock,
+          permission: 'shipments',
+          description: 'Complete package lifecycle tracking'
+        },
+        {
+          id: 'bulk_import',
+          label: 'Bulk Import',
+          icon: Upload,
+          permission: 'shipments',
+          description: 'Import historical package data'
         },
       ]
     },
@@ -473,6 +489,8 @@ export function AdminPanel() {
               {activeTab === 'operators' && hasPermission('operators') && <OperatorsTab />}
               {activeTab === 'kpi' && hasPermission('kpi') && <KPIDashboard />}
               {activeTab === 'warehouse' && hasPermission('shipments') && <WarehouseReportTab />}
+              {activeTab === 'package_history' && hasPermission('shipments') && <PackageHistoryTab />}
+              {activeTab === 'bulk_import' && hasPermission('shipments') && <BulkImportTab />}
               {activeTab === 'announcements' && hasPermission('announcements') && <AnnouncementsTab />}
               {activeTab === 'live_audio' && hasPermission('live_audio') && <LiveAudioTab />}
               {activeTab === 'notifications' && hasPermission('notifications') && <NotificationsTab />}
