@@ -159,7 +159,10 @@ export function ShipmentsTab() {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(s => {
         const matchesTitle = s.title?.toLowerCase().includes(query);
-        const matchesSSCC = s.sscc_numbers?.toLowerCase().includes(query);
+
+        const ssccList = s.sscc_numbers?.split(',').map(sscc => sscc.trim()) || [];
+        const matchesSSCC = ssccList.some(sscc => sscc.toLowerCase().includes(query));
+
         const matchesCarReg = s.car_reg_no?.toLowerCase().includes(query);
         const matchesOperators = s.assigned_operators?.some(op =>
           op.toLowerCase().includes(query)
