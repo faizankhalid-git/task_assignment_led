@@ -53,7 +53,6 @@ export function WarehouseReportTab() {
           )
         `)
         .eq('status', 'stored')
-        .eq('shipments.shipment_type', 'incoming')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
