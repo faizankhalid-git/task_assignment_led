@@ -1,138 +1,132 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Package, Clock, Calendar, TrendingUp, Download, Filter } from 'lucide-react';
+import { Package, AlertTriangle, Download, RefreshCw, Search } from 'lucide-react';
 
 type PackageReport = {
-  sscc_number: string;
-  shipment_title: string;
-  shipment_type: 'incoming' | 'outgoing' | 'general';
-  status: string;
-  arrived_at: string;
-  completed_at: string | null;
-  duration_hours: number;
-  duration_days: number;
-  is_still_in_warehouse: boolean;
+  package_id: string;
+  description: string;
+  location: string;
+  arrival: string;
+  expires: string;
+  days_left: number;
+  total_days: number;
+  status: 'Active' | 'Overdue';
+  notes: string;
 };
 
 export function WarehouseReportTab() {
   const [packages, setPackages] = useState<PackageReport[]>([]);
+  const [filteredPackages, setFilteredPackages] = useState<PackageReport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'current' | 'completed'>('all');
-  const [sortBy, setSortBy] = useState<'duration' | 'arrival'>('duration');
-  const [dateFilter, setDateFilter] = useState<'all' | 'week' | 'month' | '6months' | 'custom'>('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'overdue'>('all');
 
   useEffect(() => {
-    loadPackageReport();
+    loadWarehouseReport();
   }, []);
 
-  const loadPackageReport = async () => {
+  useEffect(() => {
+    applyFilters();
+  }, [searchQuery, statusFilter, packages]);
+
+  const loadWarehouseReport = async () => {
     try {
-      const { data, error } = await supabase
+      setLoading(true);
+
+      const { data: packagesData, error } = await supabase
         .from('packages')
         .select(`
+          id,
           sscc_number,
+          storage_location,
           status,
           created_at,
+          shipment_id,
           shipments!inner(
+            id,
             title,
             shipment_type,
             start,
             completed_at,
-            status
+            status,
+            notes
           )
         `)
+        .eq('status', 'stored')
+        .eq('shipments.shipment_type', 'incoming')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      const report: PackageReport[] = (data || []).map((pkg: any) => {
-        const arrivedAt = new Date(pkg.created_at);
-        const shipmentCompleted = pkg.shipments?.completed_at ? new Date(pkg.shipments.completed_at) : null;
-        const endTime = shipmentCompleted || new Date();
-        const durationMs = endTime.getTime() - arrivedAt.getTime();
-        const durationHours = Math.floor(durationMs / (1000 * 60 * 60));
-        const durationDays = Math.floor(durationHours / 24);
+      const now = new Date();
+      const report: PackageReport[] = (packagesData || []).map((pkg: any) => {
+        const arrivalDate = new Date(pkg.shipments.start || pkg.created_at);
+        const expiryDate = new Date(arrivalDate);
+        expiryDate.setDate(expiryDate.getDate() + 42);
 
-        const isStillInWarehouse = pkg.shipments?.status !== 'completed' &&
-                                   pkg.status !== 'completed' &&
-                                   pkg.status !== 'cancelled';
+        const totalDays = Math.floor((now.getTime() - arrivalDate.getTime()) / (1000 * 60 * 60 * 24));
+        const daysLeft = Math.floor((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        const status: 'Active' | 'Overdue' = daysLeft < 0 ? 'Overdue' : 'Active';
 
         return {
-          sscc_number: pkg.sscc_number,
-          shipment_title: pkg.shipments.title,
-          shipment_type: pkg.shipments.shipment_type || 'general',
-          status: pkg.status,
-          arrived_at: pkg.created_at,
-          completed_at: pkg.shipments?.completed_at || null,
-          duration_hours: durationHours,
-          duration_days: durationDays,
-          is_still_in_warehouse: isStillInWarehouse
+          package_id: pkg.sscc_number,
+          description: pkg.shipments.title || '',
+          location: pkg.storage_location || '',
+          arrival: arrivalDate.toISOString().split('T')[0],
+          expires: expiryDate.toISOString().split('T')[0],
+          days_left: daysLeft,
+          total_days: totalDays,
+          status,
+          notes: pkg.shipments.notes || '',
         };
       });
 
+      report.sort((a, b) => a.days_left - b.days_left);
+
       setPackages(report);
     } catch (err) {
-      console.error('Failed to load package report:', err);
+      console.error('Failed to load warehouse report:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const getFilteredPackages = () => {
+  const applyFilters = () => {
     let filtered = packages;
 
-    if (filterStatus === 'current') {
-      filtered = filtered.filter(pkg => pkg.is_still_in_warehouse);
-    } else if (filterStatus === 'completed') {
-      filtered = filtered.filter(pkg => !pkg.is_still_in_warehouse);
+    if (statusFilter === 'active') {
+      filtered = filtered.filter(p => p.status === 'Active');
+    } else if (statusFilter === 'overdue') {
+      filtered = filtered.filter(p => p.status === 'Overdue');
     }
 
-    const now = new Date();
-    if (dateFilter === 'week') {
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(pkg => new Date(pkg.arrived_at) >= weekAgo);
-    } else if (dateFilter === 'month') {
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(pkg => new Date(pkg.arrived_at) >= monthAgo);
-    } else if (dateFilter === '6months') {
-      const sixMonthsAgo = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(pkg => new Date(pkg.arrived_at) >= sixMonthsAgo);
-    } else if (dateFilter === 'custom' && startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      filtered = filtered.filter(pkg => {
-        const date = new Date(pkg.arrived_at);
-        return date >= start && date <= end;
-      });
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(p =>
+        p.package_id.toLowerCase().includes(query) ||
+        p.description.toLowerCase().includes(query) ||
+        p.location.toLowerCase().includes(query)
+      );
     }
 
-    if (sortBy === 'duration') {
-      filtered.sort((a, b) => b.duration_hours - a.duration_hours);
-    } else {
-      filtered.sort((a, b) => new Date(b.arrived_at).getTime() - new Date(a.arrived_at).getTime());
-    }
-
-    return filtered;
+    setFilteredPackages(filtered);
   };
 
   const exportToCSV = () => {
-    const filteredData = getFilteredPackages();
-    const headers = ['SSCC Number', 'Shipment', 'Type', 'Status', 'Arrived', 'Completed', 'Days in Warehouse', 'Hours in Warehouse'];
-    const rows = filteredData.map(pkg => [
-      pkg.sscc_number,
-      pkg.shipment_title,
-      pkg.shipment_type,
+    const headers = ['Package ID', 'Description', 'Location', 'Arrival', 'Expires', 'Days Left', 'Total Days', 'Status', 'Notes'];
+    const rows = filteredPackages.map(pkg => [
+      pkg.package_id,
+      pkg.description,
+      pkg.location,
+      pkg.arrival,
+      pkg.expires,
+      pkg.days_left.toString(),
+      pkg.total_days.toString(),
       pkg.status,
-      new Date(pkg.arrived_at).toLocaleString(),
-      pkg.completed_at ? new Date(pkg.completed_at).toLocaleString() : 'Still in warehouse',
-      pkg.duration_days.toString(),
-      pkg.duration_hours.toString()
+      pkg.notes
     ]);
 
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -141,31 +135,13 @@ export function WarehouseReportTab() {
     a.click();
   };
 
-  const filteredPackages = getFilteredPackages();
-  const currentPackages = packages.filter(p => p.is_still_in_warehouse);
-  const avgDuration = currentPackages.length > 0
-    ? Math.round(currentPackages.reduce((sum, p) => sum + p.duration_hours, 0) / currentPackages.length)
-    : 0;
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'incoming': return 'bg-blue-100 text-blue-700';
-      case 'outgoing': return 'bg-green-100 text-green-700';
-      case 'general': return 'bg-slate-100 text-slate-700';
-      default: return 'bg-slate-100 text-slate-700';
-    }
-  };
-
-  const getDurationColor = (hours: number) => {
-    if (hours < 24) return 'text-green-600';
-    if (hours < 72) return 'text-amber-600';
-    return 'text-red-600';
-  };
+  const activeCount = packages.filter(p => p.status === 'Active').length;
+  const overdueCount = packages.filter(p => p.status === 'Overdue').length;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-600">Loading warehouse report...</div>
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -175,233 +151,165 @@ export function WarehouseReportTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Warehouse Report</h2>
-          <p className="text-sm text-slate-600 mt-1">Track package warehouse duration and current inventory</p>
+          <p className="text-sm text-slate-600 mt-1">Track packages currently in warehouse (6-week storage limit)</p>
         </div>
-        <button
-          onClick={exportToCSV}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          Export CSV
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadWarehouseReport}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+          <button
+            onClick={exportToCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
           <div className="flex items-center gap-3 mb-2">
             <Package className="w-6 h-6 text-blue-600" />
-            <h3 className="text-sm font-medium text-blue-900">Current Packages</h3>
+            <h3 className="text-sm font-medium text-blue-900">Total in Warehouse</h3>
           </div>
-          <p className="text-3xl font-bold text-blue-700">{currentPackages.length}</p>
-          <p className="text-xs text-blue-600 mt-1">Still in warehouse</p>
-        </div>
-
-        <div className="bg-amber-50 rounded-lg p-6 border border-amber-200">
-          <div className="flex items-center gap-3 mb-2">
-            <Clock className="w-6 h-6 text-amber-600" />
-            <h3 className="text-sm font-medium text-amber-900">Avg Duration</h3>
-          </div>
-          <p className="text-3xl font-bold text-amber-700">{avgDuration}h</p>
-          <p className="text-xs text-amber-600 mt-1">{Math.floor(avgDuration / 24)} days average</p>
+          <p className="text-3xl font-bold text-blue-700">{packages.length}</p>
+          <p className="text-xs text-blue-600 mt-1">Currently stored</p>
         </div>
 
         <div className="bg-green-50 rounded-lg p-6 border border-green-200">
           <div className="flex items-center gap-3 mb-2">
-            <TrendingUp className="w-6 h-6 text-green-600" />
-            <h3 className="text-sm font-medium text-green-900">Total Processed</h3>
+            <Package className="w-6 h-6 text-green-600" />
+            <h3 className="text-sm font-medium text-green-900">Active</h3>
           </div>
-          <p className="text-3xl font-bold text-green-700">{packages.length}</p>
-          <p className="text-xs text-green-600 mt-1">All time packages</p>
+          <p className="text-3xl font-bold text-green-700">{activeCount}</p>
+          <p className="text-xs text-green-600 mt-1">Within 6-week limit</p>
+        </div>
+
+        <div className="bg-red-50 rounded-lg p-6 border border-red-200">
+          <div className="flex items-center gap-3 mb-2">
+            <AlertTriangle className="w-6 h-6 text-red-600" />
+            <h3 className="text-sm font-medium text-red-900">Overdue</h3>
+          </div>
+          <p className="text-3xl font-bold text-red-700">{overdueCount}</p>
+          <p className="text-xs text-red-600 mt-1">Beyond 6-week limit</p>
         </div>
       </div>
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <div className="space-y-4 mb-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-600" />
-              <label className="text-sm font-medium text-slate-700">Status:</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setFilterStatus('current')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filterStatus === 'current'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Current ({currentPackages.length})
-                </button>
-                <button
-                  onClick={() => setFilterStatus('completed')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filterStatus === 'completed'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Completed
-                </button>
-                <button
-                  onClick={() => setFilterStatus('all')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    filterStatus === 'all'
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  All
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 ml-auto">
-              <label className="text-sm font-medium text-slate-700">Sort:</label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'duration' | 'arrival')}
-                className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="duration">Duration (Longest first)</option>
-                <option value="arrival">Arrival (Newest first)</option>
-              </select>
-            </div>
+        <div className="flex flex-wrap items-center gap-4 mb-4">
+          <div className="flex-1 relative">
+            <Search className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by Package ID, Description, or Location..."
+              className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
-
-          <div className="flex flex-wrap items-center gap-4 border-t border-slate-200 pt-4">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-slate-600" />
-              <label className="text-sm font-medium text-slate-700">Date Range:</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setDateFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    dateFilter === 'all'
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  All Time
-                </button>
-                <button
-                  onClick={() => setDateFilter('week')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    dateFilter === 'week'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Last Week
-                </button>
-                <button
-                  onClick={() => setDateFilter('month')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    dateFilter === 'month'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Last Month
-                </button>
-                <button
-                  onClick={() => setDateFilter('6months')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    dateFilter === '6months'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Last 6 Months
-                </button>
-                <button
-                  onClick={() => setDateFilter('custom')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    dateFilter === 'custom'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Custom
-                </button>
-              </div>
-            </div>
-
-            {dateFilter === 'custom' && (
-              <div className="flex items-center gap-2 ml-auto">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
-                <span className="text-slate-500">to</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                />
-              </div>
-            )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                statusFilter === 'all'
+                  ? 'bg-slate-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              All ({packages.length})
+            </button>
+            <button
+              onClick={() => setStatusFilter('active')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                statusFilter === 'active'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Active ({activeCount})
+            </button>
+            <button
+              onClick={() => setStatusFilter('overdue')}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                statusFilter === 'overdue'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Overdue ({overdueCount})
+            </button>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full border-collapse">
             <thead>
-              <tr className="border-b border-slate-200">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">SSCC Number</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Shipment</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Type</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Status</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Arrived</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Duration</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Completed</th>
+              <tr className="bg-slate-100 border-b-2 border-slate-300">
+                <th className="text-left py-3 px-4 text-sm font-bold text-slate-700 border-r border-slate-300">Package ID</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-slate-700 border-r border-slate-300">Description</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-slate-700 border-r border-slate-300">Location</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-slate-700 border-r border-slate-300">Arrival</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-slate-700 border-r border-slate-300">Expires</th>
+                <th className="text-right py-3 px-4 text-sm font-bold text-slate-700 border-r border-slate-300">Days Left</th>
+                <th className="text-right py-3 px-4 text-sm font-bold text-slate-700 border-r border-slate-300">Total Days</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-slate-700 border-r border-slate-300">Status</th>
+                <th className="text-left py-3 px-4 text-sm font-bold text-slate-700">Notes</th>
               </tr>
             </thead>
             <tbody>
               {filteredPackages.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-slate-500">
-                    No packages found
+                  <td colSpan={9} className="text-center py-12 text-slate-500">
+                    {searchQuery || statusFilter !== 'all' ? 'No packages match your filters' : 'No packages in warehouse'}
                   </td>
                 </tr>
               ) : (
-                filteredPackages.map((pkg) => (
-                  <tr key={pkg.sscc_number} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-3 px-4 text-sm font-mono text-slate-900">{pkg.sscc_number}</td>
-                    <td className="py-3 px-4 text-sm text-slate-700">{pkg.shipment_title}</td>
-                    <td className="py-3 px-4">
-                      <span className={`text-xs font-medium px-2 py-1 rounded ${getTypeColor(pkg.shipment_type)}`}>
-                        {pkg.shipment_type}
-                      </span>
+                filteredPackages.map((pkg, index) => (
+                  <tr
+                    key={pkg.package_id + index}
+                    className={`border-b border-slate-200 hover:bg-slate-50 ${
+                      pkg.status === 'Overdue' ? 'bg-red-50' : index % 2 === 0 ? 'bg-blue-50' : 'bg-white'
+                    }`}
+                  >
+                    <td className="py-3 px-4 text-sm font-mono text-slate-900 border-r border-slate-200">
+                      {pkg.package_id}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`text-xs font-medium px-2 py-1 rounded ${
-                        pkg.status === 'completed' ? 'bg-green-100 text-green-700' :
-                        pkg.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                        'bg-blue-100 text-blue-700'
+                    <td className="py-3 px-4 text-sm text-slate-700 border-r border-slate-200">
+                      {pkg.description || '-'}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-700 border-r border-slate-200">
+                      {pkg.location || '-'}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-700 border-r border-slate-200">
+                      {pkg.arrival}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-slate-700 border-r border-slate-200">
+                      {pkg.expires}
+                    </td>
+                    <td className={`py-3 px-4 text-sm text-right font-semibold border-r border-slate-200 ${
+                      pkg.days_left < 0 ? 'text-red-700' : pkg.days_left <= 7 ? 'text-orange-700' : 'text-green-700'
+                    }`}>
+                      {pkg.days_left}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-right text-slate-700 border-r border-slate-200">
+                      {pkg.total_days}
+                    </td>
+                    <td className="py-3 px-4 border-r border-slate-200">
+                      <span className={`text-sm font-semibold px-3 py-1 rounded ${
+                        pkg.status === 'Overdue'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-green-100 text-green-800'
                       }`}>
                         {pkg.status}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-slate-600">
-                      {new Date(pkg.arrived_at).toLocaleDateString()} {new Date(pkg.arrived_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className={`text-sm font-semibold ${getDurationColor(pkg.duration_hours)}`}>
-                        {pkg.duration_days}d {pkg.duration_hours % 24}h
-                      </div>
-                      <div className="text-xs text-slate-500">{pkg.duration_hours} hours total</div>
-                    </td>
-                    <td className="py-3 px-4 text-sm text-slate-600">
-                      {pkg.completed_at ? (
-                        <>
-                          {new Date(pkg.completed_at).toLocaleDateString()}
-                        </>
-                      ) : (
-                        <span className="text-amber-600 font-medium">In warehouse</span>
-                      )}
+                    <td className="py-3 px-4 text-sm text-slate-600 max-w-xs truncate">
+                      {pkg.notes || '-'}
                     </td>
                   </tr>
                 ))
@@ -409,6 +317,26 @@ export function WarehouseReportTab() {
             </tbody>
           </table>
         </div>
+
+        {filteredPackages.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-slate-200">
+            <div className="flex items-center justify-between text-sm text-slate-600">
+              <div>
+                Showing <strong>{filteredPackages.length}</strong> of <strong>{packages.length}</strong> packages
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-green-100 border border-green-300 rounded"></div>
+                  <span>Active</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 bg-red-100 border border-red-300 rounded"></div>
+                  <span>Overdue</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
