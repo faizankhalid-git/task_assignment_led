@@ -100,6 +100,16 @@ U423481,,ML2-B1,1/26/26,6,`;
         throw new Error('User not authenticated');
       }
 
+      // Get the current max row_id to generate unique values
+      const { data: maxRowData } = await supabase
+        .from('shipments')
+        .select('row_id')
+        .order('row_id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let nextRowId = (maxRowData?.row_id || 0) + 1;
+
       for (const record of records) {
         try {
           if (importType === 'incoming') {
@@ -107,6 +117,7 @@ U423481,,ML2-B1,1/26/26,6,`;
             const { data: shipment, error: shipmentError } = await supabase
               .from('shipments')
               .insert({
+                row_id: nextRowId++,
                 title: record.description || `Import: ${record.packageId}`,
                 sscc_numbers: record.packageId,
                 storage_location: record.location,
@@ -159,6 +170,7 @@ U423481,,ML2-B1,1/26/26,6,`;
             const { data: outgoingShipment, error: shipmentError } = await supabase
               .from('shipments')
               .insert({
+                row_id: nextRowId++,
                 title: record.description || `Delivery: ${record.packageId}`,
                 sscc_numbers: record.packageId,
                 storage_location: record.location,
