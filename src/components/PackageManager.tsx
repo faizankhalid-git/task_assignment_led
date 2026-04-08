@@ -82,17 +82,16 @@ export function PackageManager({
 
   const addFromDropdown = (ssccNumber: string) => {
     if (packages.includes(ssccNumber)) {
-      alert('This package is already added');
       return;
     }
     onChange([...packages, ssccNumber]);
-    setShowDropdown(false);
     setSearchTerm('');
   };
 
-  const filteredStoredPackages = storedPackages.filter(pkg =>
-    pkg.sscc_number.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStoredPackages = storedPackages.filter(pkg => {
+    if (!searchTerm.trim()) return true;
+    return pkg.sscc_number.toLowerCase().includes(searchTerm.toLowerCase().trim());
+  });
 
   const addPackage = () => {
     const trimmed = newPackage.trim();
@@ -178,7 +177,12 @@ export function PackageManager({
         <div className="mb-3 relative">
           <button
             type="button"
-            onClick={() => setShowDropdown(!showDropdown)}
+            onClick={() => {
+              setShowDropdown(!showDropdown);
+              if (!showDropdown) {
+                setSearchTerm('');
+              }
+            }}
             disabled={disabled}
             className="w-full px-3 py-2 bg-green-50 border-2 border-green-200 rounded-lg hover:bg-green-100 disabled:bg-slate-100 flex items-center justify-between font-medium text-green-700 transition-colors"
           >
@@ -193,43 +197,58 @@ export function PackageManager({
 
           {showDropdown && (
             <div className="absolute z-10 w-full mt-1 bg-white border-2 border-green-200 rounded-lg shadow-lg max-h-80 overflow-hidden">
-              <div className="p-2 border-b border-green-100">
+              <div className="p-2 border-b border-green-100 sticky top-0 bg-white z-10">
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search packages..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
+                  placeholder="Search packages (type any part of the number)..."
+                  autoFocus
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
                 />
+                {searchTerm && (
+                  <div className="text-xs text-slate-600 mt-1">
+                    Found {filteredStoredPackages.length} package{filteredStoredPackages.length !== 1 ? 's' : ''}
+                  </div>
+                )}
               </div>
               <div className="overflow-y-auto max-h-64">
                 {filteredStoredPackages.length > 0 ? (
-                  filteredStoredPackages.map((pkg) => (
-                    <button
-                      key={pkg.sscc_number}
-                      type="button"
-                      onClick={() => addFromDropdown(pkg.sscc_number)}
-                      disabled={packages.includes(pkg.sscc_number)}
-                      className={`w-full px-3 py-2 text-left hover:bg-green-50 border-b border-slate-100 transition-colors ${
-                        packages.includes(pkg.sscc_number) ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium text-slate-900">{pkg.sscc_number}</span>
-                        {packages.includes(pkg.sscc_number) && (
-                          <span className="text-xs text-slate-500">Already added</span>
-                        )}
-                      </div>
-                      {pkg.storage_location && (
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          Location: {pkg.storage_location}
+                  filteredStoredPackages.map((pkg) => {
+                    const isAdded = packages.includes(pkg.sscc_number);
+                    return (
+                      <button
+                        key={pkg.sscc_number}
+                        type="button"
+                        onClick={() => addFromDropdown(pkg.sscc_number)}
+                        disabled={isAdded}
+                        className={`w-full px-3 py-2 text-left border-b border-slate-100 transition-colors ${
+                          isAdded
+                            ? 'bg-slate-100 opacity-60 cursor-not-allowed'
+                            : 'hover:bg-green-50 cursor-pointer'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`font-medium ${isAdded ? 'text-slate-500' : 'text-slate-900'}`}>
+                            {pkg.sscc_number}
+                          </span>
+                          {isAdded && (
+                            <span className="text-xs text-green-600 font-medium bg-green-100 px-2 py-0.5 rounded">
+                              ✓ Added
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </button>
-                  ))
+                        {pkg.storage_location && (
+                          <div className={`text-xs mt-0.5 ${isAdded ? 'text-slate-400' : 'text-slate-500'}`}>
+                            Location: {pkg.storage_location}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })
                 ) : (
                   <div className="px-3 py-4 text-center text-slate-500 text-sm">
-                    No packages found
+                    {searchTerm ? `No packages matching "${searchTerm}"` : 'No packages found'}
                   </div>
                 )}
               </div>
