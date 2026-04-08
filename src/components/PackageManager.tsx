@@ -9,6 +9,7 @@ export interface PackageWithDeviation {
 }
 
 type StoredPackage = {
+  id: string;
   sscc_number: string;
   status: string;
   storage_location: string;
@@ -69,7 +70,7 @@ export function PackageManager({
     try {
       const { data, error } = await supabase
         .from('packages')
-        .select('sscc_number, status, storage_location, created_at')
+        .select('id, sscc_number, status, storage_location, created_at')
         .eq('status', 'stored')
         .order('created_at', { ascending: false });
 
@@ -221,7 +222,7 @@ export function PackageManager({
                     const isAdded = packages.includes(pkg.sscc_number);
                     return (
                       <button
-                        key={pkg.sscc_number}
+                        key={pkg.id}
                         type="button"
                         onClick={() => addFromDropdown(pkg.sscc_number)}
                         disabled={isAdded}
