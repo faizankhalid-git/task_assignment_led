@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, X, AlertTriangle, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -88,10 +88,13 @@ export function PackageManager({
     setSearchTerm('');
   };
 
-  const filteredStoredPackages = storedPackages.filter(pkg => {
-    if (!searchTerm.trim()) return true;
-    return pkg.sscc_number.toLowerCase().includes(searchTerm.toLowerCase().trim());
-  });
+  const filteredStoredPackages = React.useMemo(() => {
+    if (!searchTerm.trim()) return storedPackages;
+    const query = searchTerm.toLowerCase().trim();
+    return storedPackages.filter(pkg =>
+      pkg.sscc_number.toLowerCase().includes(query)
+    );
+  }, [storedPackages, searchTerm]);
 
   const addPackage = () => {
     const trimmed = newPackage.trim();
